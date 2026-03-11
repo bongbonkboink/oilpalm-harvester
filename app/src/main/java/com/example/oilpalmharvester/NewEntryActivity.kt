@@ -85,14 +85,39 @@ class NewEntryActivity : AppCompatActivity() {
     private fun fetchLocation() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
             != PackageManager.PERMISSION_GRANTED) return
-        LocationServices.getFusedLocationProviderClient(this)
-            .lastLocation.addOnSuccessListener { loc: Location? ->
-                if (loc != null) {
-                    currentLat = loc.latitude
-                    currentLng = loc.longitude
-                    tvGpsStatus.text = "GPS: %.6f, %.6f".format(currentLat, currentLng)
-                    tvGpsStatus.setTextColor(android.graphics.Color.parseColor("#00d4ff"))
-                } else {
+
+        val client = LocationServices.getFusedLocationProviderClient(this)
+
+        // First try last known location
+        client.lastLocation.addOnSuccessListener { loc ->
+            if (loc != null) {
+                currentLat = loc.latitude
+                currentLng = loc.longitude
+                tvGpsStatus.text = "GPS: %.6f, %.6f".format(currentLat, currentLng)
+                tvGpsStatus.setTextColor(android.graphics.Color.parseColor("#00d4ff"))
+            }
+        }
+
+        // Also request a fresh update
+        val request = com.google.android.gms.location.LocationRequest.Builder(
+            com.google.android.gms.location.Priority.PRIORITY_HIGH_ACCURACY, 5000L)
+            .setMinUpdateIntervalMillis(2000L)
+            .setMaxUpdates(1)
+            .build()
+
+        val callback = object : com.google.android.gms.location.LocationCallback() {
+            override fun onLocationResult(result: com.google.android.gms.location.LocationResult) {
+                val loc = result.lastLocation ?: return
+                currentLat = loc.latitude
+                currentLng = loc.longitude
+                tvGpsStatus.text = "GPS: %.6f, %.6f".format(currentLat, currentLng)
+                tvGpsStatus.setTextColor(android.graphics.Color.parseColor("#00d4ff"))
+                client.removeLocationUpdates(this)
+            }
+        }
+        client.requestLocationUpdates(request, callback,
+            android.os.Looper.getMainLooper())
+    } else {
                     tvGpsStatus.text = "GPS: No fix yet (will save 0,0)"
                 }
             }
@@ -189,5 +214,6 @@ class NewEntryActivity : AppCompatActivity() {
     private fun toast(msg: String) =
         Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
 }
+
 
 
