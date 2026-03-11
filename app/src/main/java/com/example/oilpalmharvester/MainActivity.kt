@@ -19,13 +19,13 @@ import androidx.lifecycle.lifecycleScope
 import com.chaquo.python.Python
 import com.chaquo.python.android.AndroidPlatform
 import kotlinx.coroutines.*
-import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
 
 class MainActivity : AppCompatActivity() {
 
     private lateinit var tvHarvesterId: TextView
+    private lateinit var btnSettings: Button
     private lateinit var btnNavLog: Button
     private lateinit var btnNavRecords: Button
     private lateinit var btnNavCalendar: Button
@@ -33,7 +33,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var panelLog: LinearLayout
     private lateinit var panelRecords: ScrollView
     private lateinit var panelCalendar: LinearLayout
-    private lateinit var panelSync: LinearLayout
+    private lateinit var panelSync: ScrollView
     private lateinit var tvTodaySummary: TextView
     private lateinit var btnNewEntry: Button
     private lateinit var recordsContainer: LinearLayout
@@ -42,35 +42,43 @@ class MainActivity : AppCompatActivity() {
     private lateinit var spinnerDevices: Spinner
     private lateinit var btnConnect: Button
     private lateinit var tvMyAddress: TextView
+    private lateinit var tvBaseStationAddr: TextView
+    private lateinit var tvUnsyncedCount: TextView
     private lateinit var btnSyncNow: Button
+    private lateinit var tvSyncLog: TextView
 
     private val btService = BluetoothService()
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
-    private var calendarYear = 0
+    private var calendarYear  = 0
     private var calendarMonth = 0
+    private var rnsConnected  = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        tvHarvesterId   = findViewById(R.id.tvHarvesterId)
-        btnNavLog       = findViewById(R.id.btnNavLog)
-        btnNavRecords   = findViewById(R.id.btnNavRecords)
-        btnNavCalendar  = findViewById(R.id.btnNavCalendar)
-        btnNavSync      = findViewById(R.id.btnNavSync)
-        panelLog        = findViewById(R.id.panelLog)
-        panelRecords    = findViewById(R.id.panelRecords)
-        panelCalendar   = findViewById(R.id.panelCalendar)
-        panelSync       = findViewById(R.id.panelSync)
-        tvTodaySummary  = findViewById(R.id.tvTodaySummary)
-        btnNewEntry     = findViewById(R.id.btnNewEntry)
+        tvHarvesterId    = findViewById(R.id.tvHarvesterId)
+        btnSettings      = findViewById(R.id.btnSettings)
+        btnNavLog        = findViewById(R.id.btnNavLog)
+        btnNavRecords    = findViewById(R.id.btnNavRecords)
+        btnNavCalendar   = findViewById(R.id.btnNavCalendar)
+        btnNavSync       = findViewById(R.id.btnNavSync)
+        panelLog         = findViewById(R.id.panelLog)
+        panelRecords     = findViewById(R.id.panelRecords)
+        panelCalendar    = findViewById(R.id.panelCalendar)
+        panelSync        = findViewById(R.id.panelSync)
+        tvTodaySummary   = findViewById(R.id.tvTodaySummary)
+        btnNewEntry      = findViewById(R.id.btnNewEntry)
         recordsContainer = findViewById(R.id.recordsContainer)
-        calendarGrid    = findViewById(R.id.calendarGrid)
-        tvCalendarMonth = findViewById(R.id.tvCalendarMonth)
-        spinnerDevices  = findViewById(R.id.spinnerDevices)
-        btnConnect      = findViewById(R.id.btnConnect)
-        tvMyAddress     = findViewById(R.id.tvMyAddress)
-        btnSyncNow      = findViewById(R.id.btnSyncNow)
+        calendarGrid     = findViewById(R.id.calendarGrid)
+        tvCalendarMonth  = findViewById(R.id.tvCalendarMonth)
+        spinnerDevices   = findViewById(R.id.spinnerDevices)
+        btnConnect       = findViewById(R.id.btnConnect)
+        tvMyAddress      = findViewById(R.id.tvMyAddress)
+        tvBaseStationAddr = findViewById(R.id.tvBaseStationAddr)
+        tvUnsyncedCount  = findViewById(R.id.tvUnsyncedCount)
+        btnSyncNow       = findViewById(R.id.btnSyncNow)
+        tvSyncLog        = findViewById(R.id.tvSyncLog)
 
         if (!Python.isStarted()) Python.start(AndroidPlatform(this))
 
@@ -82,27 +90,42 @@ class MainActivity : AppCompatActivity() {
         calendarYear  = cal.get(Calendar.YEAR)
         calendarMonth = cal.get(Calendar.MONTH)
 
+        btnSettings.setOnClickListener {
+            startActivity(android.content.Intent(this, SettingsActivity::class.java))
+        }
         btnNavLog.setOnClickListener      { showTab("log") }
         btnNavRecords.setOnClickListener  { showTab("records") }
         btnNavCalendar.setOnClickListener { showTab("calendar") }
         btnNavSync.setOnClickListener     { showTab("sync") }
 
         btnNewEntry.setOnClickListener {
-            val intent = android.content.Intent(this, NewEntryActivity::class.java)
-            startActivityForResult(intent, 200)
+            startActivityForResult(
+                android.content.Intent(this, NewEntryActivity::class.java), 200)
         }
 
-        if (hid.isEmpty()) promptForHarvesterId()
+        btnSyncNow.setOnClickListener { startSync() }
 
+        if (hid.isEmpty()) promptForHarvesterId()
         requestBtPermissions()
         refreshTodaySummary()
     }
 
+    override fun onResume() {
+        super.onResume()
+        val prefs = getSharedPreferences("oilpalm", MODE_PRIVATE)
+        val hid = prefs.getString("harvester_id", "") ?: ""
+        if (hid.isNotEmpty()) tvHarvesterId.text = "ID: $hid"
+        val base = prefs.getString("base_station_address", "") ?: ""
+        tvBaseStationAddr.text = if (base.isEmpty()) "Not set — go to Settings ?" else base
+        tvBaseStationAddr.setTextColor(
+            if (base.isEmpty()) Color.parseColor("#555555")
+            else Color.parseColor("#00d4ff"))
+        refreshUnsyncedCount()
+    }
+
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: android.content.Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == 200 && resultCode == RESULT_OK) {
-            refreshTodaySummary()
-        }
+        if (requestCode == 200 && resultCode == RESULT_OK) refreshTodaySummary()
     }
 
     private fun refreshTodaySummary() {
@@ -111,19 +134,102 @@ class MainActivity : AppCompatActivity() {
             val cal = Calendar.getInstance()
             cal.set(Calendar.HOUR_OF_DAY, 0); cal.set(Calendar.MINUTE, 0)
             cal.set(Calendar.SECOND, 0);      cal.set(Calendar.MILLISECOND, 0)
-            val startOfDay = cal.timeInMillis
-            val endOfDay   = startOfDay + 86400000L
-            val records = dao.getForDay(startOfDay, endOfDay)
+            val start = cal.timeInMillis
+            val end   = start + 86400000L
+            val records = dao.getForDay(start, end)
             val totalRipe  = records.sumOf { it.ripeBunches }
             val totalEmpty = records.sumOf { it.emptyBunches }
             tvTodaySummary.text = if (records.isEmpty()) "No entries yet"
-            else "${records.size} block(s) | Ripe: $totalRipe | Empty: $totalEmpty"
+            else "${records.size} block(s)  |  Ripe: $totalRipe  |  Empty: $totalEmpty"
         }
     }
 
+    private fun refreshUnsyncedCount() {
+        lifecycleScope.launch {
+            val unsynced = HarvestDatabase.getInstance(this@MainActivity)
+                .harvestDao().getUnsynced()
+            tvUnsyncedCount.text = "${unsynced.size} record(s) not yet synced"
+        }
+    }
+
+    private fun startSync() {
+        val prefs = getSharedPreferences("oilpalm", MODE_PRIVATE)
+        val baseAddr = prefs.getString("base_station_address", "") ?: ""
+        if (baseAddr.isEmpty()) {
+            toast("Set base station address in Settings first")
+            return
+        }
+        if (!rnsConnected) {
+            toast("Connect to RNode first")
+            return
+        }
+
+        btnSyncNow.isEnabled = false
+        btnSyncNow.text = "Syncing..."
+        appendSyncLog("Starting sync...")
+
+        scope.launch {
+            val dao = HarvestDatabase.getInstance(this@MainActivity).harvestDao()
+            val unsynced = withContext(Dispatchers.IO) { dao.getUnsynced() }
+
+            if (unsynced.isEmpty()) {
+                appendSyncLog("Nothing to sync.")
+                btnSyncNow.isEnabled = true
+                btnSyncNow.text = "Sync Now"
+                return@launch
+            }
+
+            appendSyncLog("${unsynced.size} record(s) to send...")
+
+            // Build CSV
+            val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+            val sb = StringBuilder()
+            sb.appendLine("id,harvester_id,block_id,ripe_bunches,empty_bunches,latitude,longitude,timestamp,photo_file")
+            for (r in unsynced) {
+                val photoFile = java.io.File(r.photoPath).name
+                sb.appendLine("${r.id},${r.harvesterId},${r.blockId},${r.ripeBunches},${r.emptyBunches},${r.latitude},${r.longitude},${sdf.format(Date(r.timestamp))},$photoFile")
+            }
+            val csvText  = sb.toString()
+            val filename = "harvest_${SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())}.csv"
+
+            // Send CSV
+            appendSyncLog("Sending CSV ($filename)...")
+            val csvResult = withContext(Dispatchers.IO) {
+                RNSBridge.sendCsv(baseAddr, csvText, filename)
+            }
+            appendSyncLog("CSV: $csvResult")
+
+            if (csvResult == "OK") {
+                // Send photos one by one
+                for (r in unsynced) {
+                    appendSyncLog("Sending photo for block ${r.blockId}...")
+                    val photoResult = withContext(Dispatchers.IO) {
+                        RNSBridge.sendPhoto(baseAddr, r.photoPath, r.id)
+                    }
+                    appendSyncLog("Photo ${r.id}: $photoResult")
+                    if (photoResult == "OK") {
+                        withContext(Dispatchers.IO) { dao.markSynced(r.id) }
+                    }
+                }
+                appendSyncLog("Sync complete!")
+                refreshUnsyncedCount()
+            } else {
+                appendSyncLog("CSV failed, aborting. Check connection.")
+            }
+
+            btnSyncNow.isEnabled = true
+            btnSyncNow.text = "Sync Now"
+        }
+    }
+
+    private fun appendSyncLog(msg: String) {
+        val ts = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())
+        tvSyncLog.text = "[$ts] $msg\n${tvSyncLog.text}"
+    }
+
     private fun showTab(tab: String) {
-        val cyan = ColorStateList.valueOf(Color.parseColor("#00d4ff"))
-        val dark = ColorStateList.valueOf(Color.parseColor("#0f3460"))
+        val cyan     = ColorStateList.valueOf(Color.parseColor("#00d4ff"))
+        val dark     = ColorStateList.valueOf(Color.parseColor("#0f3460"))
         val darkText = Color.parseColor("#1a1a2e")
 
         panelLog.visibility      = View.GONE
@@ -159,6 +265,7 @@ class MainActivity : AppCompatActivity() {
                 panelSync.visibility = View.VISIBLE
                 btnNavSync.backgroundTintList = cyan
                 btnNavSync.setTextColor(darkText)
+                refreshUnsyncedCount()
             }
         }
     }
@@ -169,13 +276,12 @@ class MainActivity : AppCompatActivity() {
                 .harvestDao().getAll()
             recordsContainer.removeAllViews()
             if (records.isEmpty()) {
-                val tv = TextView(this@MainActivity).apply {
+                recordsContainer.addView(TextView(this@MainActivity).apply {
                     text = "No records yet"
                     setTextColor(Color.parseColor("#aaaaaa"))
                     textSize = 15f
                     setPadding(16, 32, 16, 32)
-                }
-                recordsContainer.addView(tv)
+                })
                 return@launch
             }
             val sdf = SimpleDateFormat("dd MMM yyyy  HH:mm", Locale.getDefault())
@@ -190,23 +296,15 @@ class MainActivity : AppCompatActivity() {
                     lp.setMargins(0, 0, 0, 8)
                     layoutParams = lp
                 }
-
-                // Thumbnail
                 val thumb = ImageView(this@MainActivity).apply {
                     val lp = LinearLayout.LayoutParams(120, 120)
                     lp.setMargins(0, 0, 12, 0)
                     layoutParams = lp
                     scaleType = ImageView.ScaleType.CENTER_CROP
-                    try {
-                        val bmp = loadRotatedBitmap(record.photoPath)
-                        setImageBitmap(bmp)
-                    } catch (e: Exception) {
-                        setBackgroundColor(Color.DKGRAY)
-                    }
+                    try { setImageBitmap(loadRotatedBitmap(record.photoPath)) }
+                    catch (e: Exception) { setBackgroundColor(Color.DKGRAY) }
                 }
                 card.addView(thumb)
-
-                // Text info
                 val info = LinearLayout(this@MainActivity).apply {
                     orientation = LinearLayout.VERTICAL
                     layoutParams = LinearLayout.LayoutParams(0,
@@ -219,7 +317,7 @@ class MainActivity : AppCompatActivity() {
                     setTypeface(null, android.graphics.Typeface.BOLD)
                 })
                 info.addView(TextView(this@MainActivity).apply {
-                    text = "Ripe: ${record.ripeBunches}  Empty: ${record.emptyBunches}"
+                    text = "Ripe: ${record.ripeBunches}   Empty: ${record.emptyBunches}"
                     setTextColor(Color.WHITE)
                     textSize = 13f
                 })
@@ -230,13 +328,12 @@ class MainActivity : AppCompatActivity() {
                     typeface = android.graphics.Typeface.MONOSPACE
                 })
                 info.addView(TextView(this@MainActivity).apply {
-                    text = sdf.format(Date(record.timestamp))
-                    setTextColor(Color.GRAY)
+                    text = sdf.format(Date(record.timestamp)) +
+                           if (record.synced) "  ? synced" else "  ? pending"
+                    setTextColor(if (record.synced) Color.parseColor("#00d4ff") else Color.GRAY)
                     textSize = 10f
                 })
                 card.addView(info)
-
-                // Long press to delete
                 card.setOnLongClickListener {
                     androidx.appcompat.app.AlertDialog.Builder(this@MainActivity)
                         .setTitle("Delete Record")
@@ -245,14 +342,12 @@ class MainActivity : AppCompatActivity() {
                             lifecycleScope.launch {
                                 HarvestDatabase.getInstance(this@MainActivity)
                                     .harvestDao().deleteById(record.id)
-                                // Also delete photo file
-                                try { File(record.photoPath).delete() } catch (_: Exception) {}
+                                try { java.io.File(record.photoPath).delete() } catch (_: Exception) {}
                                 loadRecords()
                                 refreshTodaySummary()
                             }
                         }
-                        .setNegativeButton("Cancel", null)
-                        .show()
+                        .setNegativeButton("Cancel", null).show()
                     true
                 }
                 recordsContainer.addView(card)
@@ -269,28 +364,19 @@ class MainActivity : AppCompatActivity() {
             val startOfMonth = cal.timeInMillis
             cal.add(Calendar.MONTH, 1)
             val endOfMonth = cal.timeInMillis
-
             val records = dao.getForMonth(startOfMonth, endOfMonth)
-
-            // Map day-of-month -> total bunches
             val dailyTotals = mutableMapOf<Int, Int>()
             for (r in records) {
-                val dayCal = Calendar.getInstance()
-                dayCal.timeInMillis = r.timestamp
-                val day = dayCal.get(Calendar.DAY_OF_MONTH)
+                val dc = Calendar.getInstance()
+                dc.timeInMillis = r.timestamp
+                val day = dc.get(Calendar.DAY_OF_MONTH)
                 dailyTotals[day] = (dailyTotals[day] ?: 0) + r.ripeBunches + r.emptyBunches
             }
-
-            val monthName = SimpleDateFormat("MMMM yyyy", Locale.getDefault())
+            tvCalendarMonth.text = SimpleDateFormat("MMMM yyyy", Locale.getDefault())
                 .format(Date(startOfMonth))
-            tvCalendarMonth.text = monthName
-
             calendarGrid.removeAllViews()
             calendarGrid.columnCount = 7
-
-            // Day headers
-            val dayNames = listOf("Sun","Mon","Tue","Wed","Thu","Fri","Sat")
-            for (name in dayNames) {
+            for (name in listOf("Sun","Mon","Tue","Wed","Thu","Fri","Sat")) {
                 calendarGrid.addView(TextView(this@MainActivity).apply {
                     text = name
                     setTextColor(Color.parseColor("#00d4ff"))
@@ -304,13 +390,9 @@ class MainActivity : AppCompatActivity() {
                     }
                 })
             }
-
-            // First day of week offset
-            val firstDayCal = Calendar.getInstance()
-            firstDayCal.set(calendarYear, calendarMonth, 1)
-            val firstDow = firstDayCal.get(Calendar.DAY_OF_WEEK) - 1 // 0=Sun
-
-            // Empty cells before first day
+            val firstCal = Calendar.getInstance()
+            firstCal.set(calendarYear, calendarMonth, 1)
+            val firstDow = firstCal.get(Calendar.DAY_OF_WEEK) - 1
             repeat(firstDow) {
                 calendarGrid.addView(TextView(this@MainActivity).apply {
                     text = ""
@@ -321,26 +403,22 @@ class MainActivity : AppCompatActivity() {
                     }
                 })
             }
-
-            // Days of month
-            val daysInMonth = firstDayCal.getActualMaximum(Calendar.DAY_OF_MONTH)
+            val daysInMonth = firstCal.getActualMaximum(Calendar.DAY_OF_MONTH)
             val today = Calendar.getInstance()
             for (day in 1..daysInMonth) {
                 val total = dailyTotals[day] ?: 0
                 val isToday = calendarYear == today.get(Calendar.YEAR) &&
                               calendarMonth == today.get(Calendar.MONTH) &&
                               day == today.get(Calendar.DAY_OF_MONTH)
-
-                val bgColor = when {
-                    total > 0  -> Color.parseColor("#1a3a1a")
-                    else       -> Color.parseColor("#1a1a2e")
-                }
                 val cell = LinearLayout(this@MainActivity).apply {
                     orientation = LinearLayout.VERTICAL
                     gravity = android.view.Gravity.CENTER
                     setPadding(2, 6, 2, 6)
-                    setBackgroundColor(bgColor)
-                    if (isToday) setBackgroundColor(Color.parseColor("#0f3460"))
+                    setBackgroundColor(when {
+                        isToday    -> Color.parseColor("#0f3460")
+                        total > 0  -> Color.parseColor("#1a3a1a")
+                        else       -> Color.parseColor("#1a1a2e")
+                    })
                     layoutParams = android.widget.GridLayout.LayoutParams().apply {
                         width = 0
                         setMargins(2, 2, 2, 2)
@@ -369,11 +447,11 @@ class MainActivity : AppCompatActivity() {
 
     private fun loadRotatedBitmap(path: String): android.graphics.Bitmap {
         val bitmap = BitmapFactory.decodeFile(path)
-        val exif = ExifInterface(path)
-        val orientation = exif.getAttributeInt(
+        val exif   = ExifInterface(path)
+        val orient = exif.getAttributeInt(
             ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)
         val matrix = Matrix()
-        when (orientation) {
+        when (orient) {
             ExifInterface.ORIENTATION_ROTATE_90  -> matrix.postRotate(90f)
             ExifInterface.ORIENTATION_ROTATE_180 -> matrix.postRotate(180f)
             ExifInterface.ORIENTATION_ROTATE_270 -> matrix.postRotate(270f)
@@ -398,7 +476,7 @@ class MainActivity : AppCompatActivity() {
                     getSharedPreferences("oilpalm", MODE_PRIVATE)
                         .edit().putString("harvester_id", id).apply()
                     tvHarvesterId.text = "ID: $id"
-                    Toast.makeText(this, "Harvester ID saved!", Toast.LENGTH_SHORT).show()
+                    toast("Harvester ID saved!")
                 }
             }.show()
     }
@@ -420,19 +498,16 @@ class MainActivity : AppCompatActivity() {
         requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (grantResults.all { it == PackageManager.PERMISSION_GRANTED }) setupBluetooth()
-        else Toast.makeText(this, "Bluetooth permissions denied", Toast.LENGTH_SHORT).show()
+        else toast("Bluetooth permissions denied")
     }
 
     private fun setupBluetooth() {
         val bm = getSystemService(BLUETOOTH_SERVICE) as BluetoothManager
-        val ba = bm.adapter ?: run {
-            Toast.makeText(this, "No Bluetooth!", Toast.LENGTH_SHORT).show()
-            return
-        }
+        val ba = bm.adapter ?: run { toast("No Bluetooth!"); return }
         val paired = ba.bondedDevices?.toList() ?: emptyList()
-        val names = paired.map { "${it.name} (${it.address})" }
         spinnerDevices.adapter = ArrayAdapter(
-            this, android.R.layout.simple_spinner_item, names
+            this, android.R.layout.simple_spinner_item,
+            paired.map { "${it.name} (${it.address})" }
         ).also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
 
         btnConnect.setOnClickListener {
@@ -440,22 +515,23 @@ class MainActivity : AppCompatActivity() {
             if (idx < 0 || idx >= paired.size) return@setOnClickListener
             val device = paired[idx]
             btnConnect.isEnabled = false
-            Toast.makeText(this, "Connecting...", Toast.LENGTH_SHORT).show()
+            toast("Connecting...")
             scope.launch {
                 val connected = withContext(Dispatchers.IO) { btService.connect(device.address) }
                 if (!connected) {
-                    Toast.makeText(this@MainActivity, "BT connection failed", Toast.LENGTH_SHORT).show()
+                    toast("BT connection failed")
                     btnConnect.isEnabled = true
                     return@launch
                 }
                 val addr = withContext(Dispatchers.IO) { RNSBridge.start(btService) }
                 if (addr.startsWith("Error")) {
-                    Toast.makeText(this@MainActivity, "RNS error: $addr", Toast.LENGTH_SHORT).show()
+                    toast("RNS error: $addr")
                     btnConnect.isEnabled = true
                 } else {
-                    tvMyAddress.text = "Address: $addr"
+                    tvMyAddress.text = "My address: $addr"
+                    rnsConnected = true
                     btnSyncNow.isEnabled = true
-                    Toast.makeText(this@MainActivity, "RNS Ready!", Toast.LENGTH_SHORT).show()
+                    toast("RNS Ready!")
                 }
             }
         }
@@ -466,4 +542,7 @@ class MainActivity : AppCompatActivity() {
         scope.cancel()
         btService.disconnect()
     }
+
+    private fun toast(msg: String) =
+        Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
 }

@@ -27,7 +27,19 @@
             android:layout_height="wrap_content"
             android:text="ID: -"
             android:textColor="#aaaaaa"
-            android:textSize="12sp"/>
+            android:textSize="12sp"
+            android:paddingEnd="8dp"/>
+        <Button
+            android:id="@+id/btnSettings"
+            android:layout_width="wrap_content"
+            android:layout_height="36dp"
+            android:text="?"
+            android:textSize="16sp"
+            android:backgroundTint="#1a1a2e"
+            android:textColor="#aaaaaa"
+            android:minWidth="0dp"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp"/>
     </LinearLayout>
 
     <FrameLayout
@@ -105,53 +117,101 @@
                 android:columnCount="7"/>
         </LinearLayout>
 
-        <LinearLayout
+        <ScrollView
             android:id="@+id/panelSync"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:orientation="vertical"
-            android:gravity="center"
-            android:padding="24dp"
             android:visibility="gone">
-            <TextView
-                android:layout_width="wrap_content"
+            <LinearLayout
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="RNS Sync"
-                android:textColor="#ffffff"
-                android:textSize="20sp"
-                android:textStyle="bold"
-                android:layout_marginBottom="16dp"/>
-            <Spinner
-                android:id="@+id/spinnerDevices"
-                android:layout_width="match_parent"
-                android:layout_height="48dp"
-                android:layout_marginBottom="8dp"/>
-            <Button
-                android:id="@+id/btnConnect"
-                android:layout_width="match_parent"
-                android:layout_height="48dp"
-                android:text="Connect to RNode"
-                android:backgroundTint="#0f3460"
-                android:textColor="#00d4ff"
-                android:layout_marginBottom="16dp"/>
-            <TextView
-                android:id="@+id/tvMyAddress"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Not connected"
-                android:textColor="#aaaaaa"
-                android:textSize="11sp"
-                android:fontFamily="monospace"
-                android:layout_marginBottom="16dp"/>
-            <Button
-                android:id="@+id/btnSyncNow"
-                android:layout_width="match_parent"
-                android:layout_height="48dp"
-                android:text="Sync Records Now"
-                android:backgroundTint="#00d4ff"
-                android:textColor="#1a1a2e"
-                android:enabled="false"/>
-        </LinearLayout>
+                android:orientation="vertical"
+                android:padding="24dp">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="RNS Sync"
+                    android:textColor="#00d4ff"
+                    android:textSize="20sp"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="16dp"/>
+
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                    android:text="BLUETOOTH DEVICE" android:textColor="#aaaaaa" android:textSize="11sp"
+                    android:layout_marginBottom="4dp"/>
+                <Spinner
+                    android:id="@+id/spinnerDevices"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:layout_marginBottom="8dp"/>
+                <Button
+                    android:id="@+id/btnConnect"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:text="Connect to RNode"
+                    android:backgroundTint="#0f3460"
+                    android:textColor="#00d4ff"
+                    android:layout_marginBottom="8dp"/>
+                <TextView
+                    android:id="@+id/tvMyAddress"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Not connected"
+                    android:textColor="#aaaaaa"
+                    android:textSize="11sp"
+                    android:fontFamily="monospace"
+                    android:layout_marginBottom="24dp"/>
+
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                    android:text="BASE STATION ADDRESS" android:textColor="#aaaaaa" android:textSize="11sp"
+                    android:layout_marginBottom="4dp"/>
+                <TextView
+                    android:id="@+id/tvBaseStationAddr"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Not set — go to Settings"
+                    android:textColor="#555555"
+                    android:textSize="12sp"
+                    android:fontFamily="monospace"
+                    android:layout_marginBottom="24dp"/>
+
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                    android:text="PENDING SYNC" android:textColor="#aaaaaa" android:textSize="11sp"
+                    android:layout_marginBottom="4dp"/>
+                <TextView
+                    android:id="@+id/tvUnsyncedCount"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="—"
+                    android:textColor="#ffffff"
+                    android:textSize="15sp"
+                    android:layout_marginBottom="16dp"/>
+
+                <Button
+                    android:id="@+id/btnSyncNow"
+                    android:layout_width="match_parent"
+                    android:layout_height="56dp"
+                    android:text="Sync Now"
+                    android:backgroundTint="#00d4ff"
+                    android:textColor="#1a1a2e"
+                    android:textSize="16sp"
+                    android:textStyle="bold"
+                    android:enabled="false"
+                    android:layout_marginBottom="16dp"/>
+
+                <TextView
+                    android:id="@+id/tvSyncLog"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text=""
+                    android:textColor="#aaaaaa"
+                    android:textSize="11sp"
+                    android:fontFamily="monospace"
+                    android:layout_marginBottom="8dp"/>
+
+            </LinearLayout>
+        </ScrollView>
 
     </FrameLayout>
 

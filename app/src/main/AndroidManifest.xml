@@ -16,6 +16,7 @@
         android:label="OilPalm Harvester"
         android:theme="@style/Theme.AppCompat.Light.DarkActionBar">
         <activity android:name=".NewEntryActivity"/>
+        <activity android:name=".SettingsActivity"/>
         <activity android:name=".MainActivity" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
@@ -33,6 +34,7 @@
         </provider>
     </application>
 </manifest>
+
 
 
 
