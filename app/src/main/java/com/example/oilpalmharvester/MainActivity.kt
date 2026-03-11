@@ -3,7 +3,9 @@ package com.example.oilpalmharvester
 import android.Manifest
 import android.bluetooth.BluetoothManager
 import android.content.pm.PackageManager
+import android.graphics.BitmapFactory
 import android.graphics.Color
+import android.graphics.Matrix
 import android.os.Build
 import android.os.Bundle
 import android.view.View
@@ -12,9 +14,14 @@ import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.exifinterface.media.ExifInterface
+import androidx.lifecycle.lifecycleScope
 import com.chaquo.python.Python
 import com.chaquo.python.android.AndroidPlatform
 import kotlinx.coroutines.*
+import java.io.File
+import java.text.SimpleDateFormat
+import java.util.*
 
 class MainActivity : AppCompatActivity() {
 
@@ -29,6 +36,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var panelSync: LinearLayout
     private lateinit var tvTodaySummary: TextView
     private lateinit var btnNewEntry: Button
+    private lateinit var recordsContainer: LinearLayout
+    private lateinit var calendarGrid: android.widget.GridLayout
+    private lateinit var tvCalendarMonth: TextView
     private lateinit var spinnerDevices: Spinner
     private lateinit var btnConnect: Button
     private lateinit var tvMyAddress: TextView
@@ -36,6 +46,8 @@ class MainActivity : AppCompatActivity() {
 
     private val btService = BluetoothService()
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+    private var calendarYear = 0
+    private var calendarMonth = 0
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -52,18 +64,23 @@ class MainActivity : AppCompatActivity() {
         panelSync       = findViewById(R.id.panelSync)
         tvTodaySummary  = findViewById(R.id.tvTodaySummary)
         btnNewEntry     = findViewById(R.id.btnNewEntry)
+        recordsContainer = findViewById(R.id.recordsContainer)
+        calendarGrid    = findViewById(R.id.calendarGrid)
+        tvCalendarMonth = findViewById(R.id.tvCalendarMonth)
         spinnerDevices  = findViewById(R.id.spinnerDevices)
         btnConnect      = findViewById(R.id.btnConnect)
         tvMyAddress     = findViewById(R.id.tvMyAddress)
         btnSyncNow      = findViewById(R.id.btnSyncNow)
 
-        if (!Python.isStarted()) {
-            Python.start(AndroidPlatform(this))
-        }
+        if (!Python.isStarted()) Python.start(AndroidPlatform(this))
 
         val prefs = getSharedPreferences("oilpalm", MODE_PRIVATE)
         val hid = prefs.getString("harvester_id", "") ?: ""
         if (hid.isNotEmpty()) tvHarvesterId.text = "ID: $hid"
+
+        val cal = Calendar.getInstance()
+        calendarYear  = cal.get(Calendar.YEAR)
+        calendarMonth = cal.get(Calendar.MONTH)
 
         btnNavLog.setOnClickListener      { showTab("log") }
         btnNavRecords.setOnClickListener  { showTab("records") }
@@ -78,6 +95,291 @@ class MainActivity : AppCompatActivity() {
         if (hid.isEmpty()) promptForHarvesterId()
 
         requestBtPermissions()
+        refreshTodaySummary()
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: android.content.Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == 200 && resultCode == RESULT_OK) {
+            refreshTodaySummary()
+        }
+    }
+
+    private fun refreshTodaySummary() {
+        lifecycleScope.launch {
+            val dao = HarvestDatabase.getInstance(this@MainActivity).harvestDao()
+            val cal = Calendar.getInstance()
+            cal.set(Calendar.HOUR_OF_DAY, 0); cal.set(Calendar.MINUTE, 0)
+            cal.set(Calendar.SECOND, 0);      cal.set(Calendar.MILLISECOND, 0)
+            val startOfDay = cal.timeInMillis
+            val endOfDay   = startOfDay + 86400000L
+            val records = dao.getForDay(startOfDay, endOfDay)
+            val totalRipe  = records.sumOf { it.ripeBunches }
+            val totalEmpty = records.sumOf { it.emptyBunches }
+            tvTodaySummary.text = if (records.isEmpty()) "No entries yet"
+            else "${records.size} block(s) | Ripe: $totalRipe | Empty: $totalEmpty"
+        }
+    }
+
+    private fun showTab(tab: String) {
+        val cyan = ColorStateList.valueOf(Color.parseColor("#00d4ff"))
+        val dark = ColorStateList.valueOf(Color.parseColor("#0f3460"))
+        val darkText = Color.parseColor("#1a1a2e")
+
+        panelLog.visibility      = View.GONE
+        panelRecords.visibility  = View.GONE
+        panelCalendar.visibility = View.GONE
+        panelSync.visibility     = View.GONE
+
+        listOf(btnNavLog, btnNavRecords, btnNavCalendar, btnNavSync).forEach {
+            it.backgroundTintList = dark
+            it.setTextColor(Color.WHITE)
+        }
+
+        when (tab) {
+            "log" -> {
+                panelLog.visibility = View.VISIBLE
+                btnNavLog.backgroundTintList = cyan
+                btnNavLog.setTextColor(darkText)
+                refreshTodaySummary()
+            }
+            "records" -> {
+                panelRecords.visibility = View.VISIBLE
+                btnNavRecords.backgroundTintList = cyan
+                btnNavRecords.setTextColor(darkText)
+                loadRecords()
+            }
+            "calendar" -> {
+                panelCalendar.visibility = View.VISIBLE
+                btnNavCalendar.backgroundTintList = cyan
+                btnNavCalendar.setTextColor(darkText)
+                loadCalendar()
+            }
+            "sync" -> {
+                panelSync.visibility = View.VISIBLE
+                btnNavSync.backgroundTintList = cyan
+                btnNavSync.setTextColor(darkText)
+            }
+        }
+    }
+
+    private fun loadRecords() {
+        lifecycleScope.launch {
+            val records = HarvestDatabase.getInstance(this@MainActivity)
+                .harvestDao().getAll()
+            recordsContainer.removeAllViews()
+            if (records.isEmpty()) {
+                val tv = TextView(this@MainActivity).apply {
+                    text = "No records yet"
+                    setTextColor(Color.parseColor("#aaaaaa"))
+                    textSize = 15f
+                    setPadding(16, 32, 16, 32)
+                }
+                recordsContainer.addView(tv)
+                return@launch
+            }
+            val sdf = SimpleDateFormat("dd MMM yyyy  HH:mm", Locale.getDefault())
+            for (record in records) {
+                val card = LinearLayout(this@MainActivity).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    setPadding(12, 12, 12, 12)
+                    setBackgroundColor(Color.parseColor("#0f3460"))
+                    val lp = LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT)
+                    lp.setMargins(0, 0, 0, 8)
+                    layoutParams = lp
+                }
+
+                // Thumbnail
+                val thumb = ImageView(this@MainActivity).apply {
+                    val lp = LinearLayout.LayoutParams(120, 120)
+                    lp.setMargins(0, 0, 12, 0)
+                    layoutParams = lp
+                    scaleType = ImageView.ScaleType.CENTER_CROP
+                    try {
+                        val bmp = loadRotatedBitmap(record.photoPath)
+                        setImageBitmap(bmp)
+                    } catch (e: Exception) {
+                        setBackgroundColor(Color.DKGRAY)
+                    }
+                }
+                card.addView(thumb)
+
+                // Text info
+                val info = LinearLayout(this@MainActivity).apply {
+                    orientation = LinearLayout.VERTICAL
+                    layoutParams = LinearLayout.LayoutParams(0,
+                        LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+                }
+                info.addView(TextView(this@MainActivity).apply {
+                    text = "Block: ${record.blockId}"
+                    setTextColor(Color.parseColor("#00d4ff"))
+                    textSize = 15f
+                    setTypeface(null, android.graphics.Typeface.BOLD)
+                })
+                info.addView(TextView(this@MainActivity).apply {
+                    text = "Ripe: ${record.ripeBunches}  Empty: ${record.emptyBunches}"
+                    setTextColor(Color.WHITE)
+                    textSize = 13f
+                })
+                info.addView(TextView(this@MainActivity).apply {
+                    text = "GPS: ${"%.4f".format(record.latitude)}, ${"%.4f".format(record.longitude)}"
+                    setTextColor(Color.parseColor("#aaaaaa"))
+                    textSize = 11f
+                    typeface = android.graphics.Typeface.MONOSPACE
+                })
+                info.addView(TextView(this@MainActivity).apply {
+                    text = sdf.format(Date(record.timestamp))
+                    setTextColor(Color.GRAY)
+                    textSize = 10f
+                })
+                card.addView(info)
+
+                // Long press to delete
+                card.setOnLongClickListener {
+                    androidx.appcompat.app.AlertDialog.Builder(this@MainActivity)
+                        .setTitle("Delete Record")
+                        .setMessage("Delete block ${record.blockId} entry?")
+                        .setPositiveButton("Delete") { _, _ ->
+                            lifecycleScope.launch {
+                                HarvestDatabase.getInstance(this@MainActivity)
+                                    .harvestDao().deleteById(record.id)
+                                // Also delete photo file
+                                try { File(record.photoPath).delete() } catch (_: Exception) {}
+                                loadRecords()
+                                refreshTodaySummary()
+                            }
+                        }
+                        .setNegativeButton("Cancel", null)
+                        .show()
+                    true
+                }
+                recordsContainer.addView(card)
+            }
+        }
+    }
+
+    private fun loadCalendar() {
+        lifecycleScope.launch {
+            val dao = HarvestDatabase.getInstance(this@MainActivity).harvestDao()
+            val cal = Calendar.getInstance()
+            cal.set(calendarYear, calendarMonth, 1, 0, 0, 0)
+            cal.set(Calendar.MILLISECOND, 0)
+            val startOfMonth = cal.timeInMillis
+            cal.add(Calendar.MONTH, 1)
+            val endOfMonth = cal.timeInMillis
+
+            val records = dao.getForMonth(startOfMonth, endOfMonth)
+
+            // Map day-of-month -> total bunches
+            val dailyTotals = mutableMapOf<Int, Int>()
+            for (r in records) {
+                val dayCal = Calendar.getInstance()
+                dayCal.timeInMillis = r.timestamp
+                val day = dayCal.get(Calendar.DAY_OF_MONTH)
+                dailyTotals[day] = (dailyTotals[day] ?: 0) + r.ripeBunches + r.emptyBunches
+            }
+
+            val monthName = SimpleDateFormat("MMMM yyyy", Locale.getDefault())
+                .format(Date(startOfMonth))
+            tvCalendarMonth.text = monthName
+
+            calendarGrid.removeAllViews()
+            calendarGrid.columnCount = 7
+
+            // Day headers
+            val dayNames = listOf("Sun","Mon","Tue","Wed","Thu","Fri","Sat")
+            for (name in dayNames) {
+                calendarGrid.addView(TextView(this@MainActivity).apply {
+                    text = name
+                    setTextColor(Color.parseColor("#00d4ff"))
+                    textSize = 11f
+                    gravity = android.view.Gravity.CENTER
+                    setPadding(4, 6, 4, 6)
+                    layoutParams = android.widget.GridLayout.LayoutParams().apply {
+                        width = 0
+                        columnSpec = android.widget.GridLayout.spec(
+                            android.widget.GridLayout.UNDEFINED, 1f)
+                    }
+                })
+            }
+
+            // First day of week offset
+            val firstDayCal = Calendar.getInstance()
+            firstDayCal.set(calendarYear, calendarMonth, 1)
+            val firstDow = firstDayCal.get(Calendar.DAY_OF_WEEK) - 1 // 0=Sun
+
+            // Empty cells before first day
+            repeat(firstDow) {
+                calendarGrid.addView(TextView(this@MainActivity).apply {
+                    text = ""
+                    layoutParams = android.widget.GridLayout.LayoutParams().apply {
+                        width = 0
+                        columnSpec = android.widget.GridLayout.spec(
+                            android.widget.GridLayout.UNDEFINED, 1f)
+                    }
+                })
+            }
+
+            // Days of month
+            val daysInMonth = firstDayCal.getActualMaximum(Calendar.DAY_OF_MONTH)
+            val today = Calendar.getInstance()
+            for (day in 1..daysInMonth) {
+                val total = dailyTotals[day] ?: 0
+                val isToday = calendarYear == today.get(Calendar.YEAR) &&
+                              calendarMonth == today.get(Calendar.MONTH) &&
+                              day == today.get(Calendar.DAY_OF_MONTH)
+
+                val bgColor = when {
+                    total > 0  -> Color.parseColor("#1a3a1a")
+                    else       -> Color.parseColor("#1a1a2e")
+                }
+                val cell = LinearLayout(this@MainActivity).apply {
+                    orientation = LinearLayout.VERTICAL
+                    gravity = android.view.Gravity.CENTER
+                    setPadding(2, 6, 2, 6)
+                    setBackgroundColor(bgColor)
+                    if (isToday) setBackgroundColor(Color.parseColor("#0f3460"))
+                    layoutParams = android.widget.GridLayout.LayoutParams().apply {
+                        width = 0
+                        setMargins(2, 2, 2, 2)
+                        columnSpec = android.widget.GridLayout.spec(
+                            android.widget.GridLayout.UNDEFINED, 1f)
+                    }
+                }
+                cell.addView(TextView(this@MainActivity).apply {
+                    text = "$day"
+                    setTextColor(if (isToday) Color.parseColor("#00d4ff") else Color.WHITE)
+                    textSize = 12f
+                    gravity = android.view.Gravity.CENTER
+                })
+                if (total > 0) {
+                    cell.addView(TextView(this@MainActivity).apply {
+                        text = "$total"
+                        setTextColor(Color.parseColor("#00d4ff"))
+                        textSize = 9f
+                        gravity = android.view.Gravity.CENTER
+                    })
+                }
+                calendarGrid.addView(cell)
+            }
+        }
+    }
+
+    private fun loadRotatedBitmap(path: String): android.graphics.Bitmap {
+        val bitmap = BitmapFactory.decodeFile(path)
+        val exif = ExifInterface(path)
+        val orientation = exif.getAttributeInt(
+            ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)
+        val matrix = Matrix()
+        when (orientation) {
+            ExifInterface.ORIENTATION_ROTATE_90  -> matrix.postRotate(90f)
+            ExifInterface.ORIENTATION_ROTATE_180 -> matrix.postRotate(180f)
+            ExifInterface.ORIENTATION_ROTATE_270 -> matrix.postRotate(270f)
+        }
+        return android.graphics.Bitmap.createBitmap(
+            bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
     }
 
     private fun promptForHarvesterId() {
@@ -101,45 +403,6 @@ class MainActivity : AppCompatActivity() {
             }.show()
     }
 
-    private fun showTab(tab: String) {
-        val cyan = ColorStateList.valueOf(Color.parseColor("#00d4ff"))
-        val dark = ColorStateList.valueOf(Color.parseColor("#0f3460"))
-        val darkText = Color.parseColor("#1a1a2e")
-
-        panelLog.visibility      = View.GONE
-        panelRecords.visibility  = View.GONE
-        panelCalendar.visibility = View.GONE
-        panelSync.visibility     = View.GONE
-
-        listOf(btnNavLog, btnNavRecords, btnNavCalendar, btnNavSync).forEach {
-            it.backgroundTintList = dark
-            it.setTextColor(Color.WHITE)
-        }
-
-        when (tab) {
-            "log" -> {
-                panelLog.visibility = View.VISIBLE
-                btnNavLog.backgroundTintList = cyan
-                btnNavLog.setTextColor(darkText)
-            }
-            "records" -> {
-                panelRecords.visibility = View.VISIBLE
-                btnNavRecords.backgroundTintList = cyan
-                btnNavRecords.setTextColor(darkText)
-            }
-            "calendar" -> {
-                panelCalendar.visibility = View.VISIBLE
-                btnNavCalendar.backgroundTintList = cyan
-                btnNavCalendar.setTextColor(darkText)
-            }
-            "sync" -> {
-                panelSync.visibility = View.VISIBLE
-                btnNavSync.backgroundTintList = cyan
-                btnNavSync.setTextColor(darkText)
-            }
-        }
-    }
-
     private fun requestBtPermissions() {
         val perms = mutableListOf<String>()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -154,8 +417,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onRequestPermissionsResult(
-        requestCode: Int, permissions: Array<out String>, grantResults: IntArray
-    ) {
+        requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (grantResults.all { it == PackageManager.PERMISSION_GRANTED }) setupBluetooth()
         else Toast.makeText(this, "Bluetooth permissions denied", Toast.LENGTH_SHORT).show()
@@ -205,5 +467,3 @@ class MainActivity : AppCompatActivity() {
         btService.disconnect()
     }
 }
-
-

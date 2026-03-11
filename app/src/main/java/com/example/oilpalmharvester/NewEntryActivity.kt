@@ -113,7 +113,7 @@ class NewEntryActivity : AppCompatActivity() {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == REQ_CAMERA && resultCode == RESULT_OK) {
-            val bitmap = BitmapFactory.decodeFile(photoPath)
+            val bitmap = loadCorrectlyRotatedBitmap(photoPath)
             ivPhotoPreview.setImageBitmap(bitmap)
             ivPhotoPreview.visibility = android.view.View.VISIBLE
             btnTakePhoto.text = "Retake Photo"
@@ -171,6 +171,23 @@ class NewEntryActivity : AppCompatActivity() {
         }
     }
 
+        private fun loadCorrectlyRotatedBitmap(path: String): android.graphics.Bitmap {
+        val bitmap = BitmapFactory.decodeFile(path)
+        val exif = androidx.exifinterface.media.ExifInterface(path)
+        val rotation = exif.getAttributeInt(
+            androidx.exifinterface.media.ExifInterface.TAG_ORIENTATION,
+            androidx.exifinterface.media.ExifInterface.ORIENTATION_NORMAL)
+        val matrix = android.graphics.Matrix()
+        when (rotation) {
+            androidx.exifinterface.media.ExifInterface.ORIENTATION_ROTATE_90  -> matrix.postRotate(90f)
+            androidx.exifinterface.media.ExifInterface.ORIENTATION_ROTATE_180 -> matrix.postRotate(180f)
+            androidx.exifinterface.media.ExifInterface.ORIENTATION_ROTATE_270 -> matrix.postRotate(270f)
+        }
+        return android.graphics.Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+    }
+
     private fun toast(msg: String) =
         Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
 }
+
+
