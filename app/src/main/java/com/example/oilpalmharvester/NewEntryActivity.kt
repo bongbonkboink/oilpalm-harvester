@@ -12,9 +12,9 @@ import android.provider.MediaStore
 import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.lifecycle.lifecycleScope
-import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationServices
 import kotlinx.coroutines.launch
 import java.io.File
@@ -32,14 +32,14 @@ class NewEntryActivity : AppCompatActivity() {
     private lateinit var btnSaveEntry: Button
     private lateinit var btnCancel: Button
 
-    private lateinit var fusedLocationClient: FusedLocationProviderClient
     private var currentLat: Double = 0.0
     private var currentLng: Double = 0.0
     private var photoPath: String = ""
     private var photoUri: Uri? = null
 
-    private val CAMERA_REQUEST = 101
-    private val LOCATION_REQUEST = 102
+    private val REQ_CAMERA   = 101
+    private val REQ_LOCATION = 102
+    private val REQ_PERMISSIONS = 103
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -54,38 +54,48 @@ class NewEntryActivity : AppCompatActivity() {
         btnSaveEntry   = findViewById(R.id.btnSaveEntry)
         btnCancel      = findViewById(R.id.btnCancel)
 
-        fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
+        requestAllPermissions()
 
-        requestLocationPermission()
-
-        btnTakePhoto.setOnClickListener { launchCamera() }
+        btnTakePhoto.setOnClickListener {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
+                == PackageManager.PERMISSION_GRANTED) {
+                launchCamera()
+            } else {
+                ActivityCompat.requestPermissions(this,
+                    arrayOf(Manifest.permission.CAMERA), REQ_CAMERA)
+            }
+        }
         btnSaveEntry.setOnClickListener { saveEntry() }
         btnCancel.setOnClickListener { finish() }
     }
 
-    private fun requestLocationPermission() {
-        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
-            != PackageManager.PERMISSION_GRANTED) {
-            ActivityCompat.requestPermissions(this,
-                arrayOf(Manifest.permission.ACCESS_FINE_LOCATION), LOCATION_REQUEST)
+    private fun requestAllPermissions() {
+        val needed = mutableListOf<String>()
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
+            != PackageManager.PERMISSION_GRANTED) needed += Manifest.permission.CAMERA
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
+            != PackageManager.PERMISSION_GRANTED) needed += Manifest.permission.ACCESS_FINE_LOCATION
+        if (needed.isNotEmpty()) {
+            ActivityCompat.requestPermissions(this, needed.toTypedArray(), REQ_PERMISSIONS)
         } else {
             fetchLocation()
         }
     }
 
     private fun fetchLocation() {
-        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
             != PackageManager.PERMISSION_GRANTED) return
-        fusedLocationClient.lastLocation.addOnSuccessListener { loc: Location? ->
-            if (loc != null) {
-                currentLat = loc.latitude
-                currentLng = loc.longitude
-                tvGpsStatus.text = "GPS: %.6f, %.6f".format(currentLat, currentLng)
-                tvGpsStatus.setTextColor(android.graphics.Color.parseColor("#00d4ff"))
-            } else {
-                tvGpsStatus.text = "GPS: No fix yet (will save 0,0)"
+        LocationServices.getFusedLocationProviderClient(this)
+            .lastLocation.addOnSuccessListener { loc: Location? ->
+                if (loc != null) {
+                    currentLat = loc.latitude
+                    currentLng = loc.longitude
+                    tvGpsStatus.text = "GPS: %.6f, %.6f".format(currentLat, currentLng)
+                    tvGpsStatus.setTextColor(android.graphics.Color.parseColor("#00d4ff"))
+                } else {
+                    tvGpsStatus.text = "GPS: No fix yet (will save 0,0)"
+                }
             }
-        }
     }
 
     private fun launchCamera() {
@@ -97,29 +107,44 @@ class NewEntryActivity : AppCompatActivity() {
             this, "com.example.oilpalmharvester.fileprovider", photoFile)
         val intent = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
         intent.putExtra(MediaStore.EXTRA_OUTPUT, photoUri)
-        startActivityForResult(intent, CAMERA_REQUEST)
+        startActivityForResult(intent, REQ_CAMERA)
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == CAMERA_REQUEST && resultCode == RESULT_OK) {
+        if (requestCode == REQ_CAMERA && resultCode == RESULT_OK) {
             val bitmap = BitmapFactory.decodeFile(photoPath)
             ivPhotoPreview.setImageBitmap(bitmap)
             ivPhotoPreview.visibility = android.view.View.VISIBLE
             btnTakePhoto.text = "Retake Photo"
-            btnTakePhoto.backgroundTintList =
-                android.content.res.ColorStateList.valueOf(
-                    android.graphics.Color.parseColor("#1a3a1a"))
+        }
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        when (requestCode) {
+            REQ_PERMISSIONS, REQ_LOCATION -> {
+                // Try fetching location if granted
+                fetchLocation()
+            }
+            REQ_CAMERA -> {
+                if (grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) {
+                    launchCamera()
+                } else {
+                    toast("Camera permission is required")
+                }
+            }
         }
     }
 
     private fun saveEntry() {
-        val blockId = etBlockId.text.toString().trim()
-        val ripeStr = etRipeBunches.text.toString().trim()
+        val blockId  = etBlockId.text.toString().trim()
+        val ripeStr  = etRipeBunches.text.toString().trim()
         val emptyStr = etEmptyBunches.text.toString().trim()
 
-        if (blockId.isEmpty()) { toast("Enter a Block ID"); return }
-        if (ripeStr.isEmpty()) { toast("Enter ripe bunches count"); return }
+        if (blockId.isEmpty())  { toast("Enter a Block ID"); return }
+        if (ripeStr.isEmpty())  { toast("Enter ripe bunches count"); return }
         if (emptyStr.isEmpty()) { toast("Enter empty bunches count"); return }
         if (photoPath.isEmpty()) { toast("Photo is required"); return }
 
@@ -127,14 +152,14 @@ class NewEntryActivity : AppCompatActivity() {
         val harvesterId = prefs.getString("harvester_id", "UNKNOWN") ?: "UNKNOWN"
 
         val record = HarvestRecord(
-            harvesterId   = harvesterId,
-            blockId       = blockId,
-            ripeBunches   = ripeStr.toIntOrNull() ?: 0,
-            emptyBunches  = emptyStr.toIntOrNull() ?: 0,
-            latitude      = currentLat,
-            longitude     = currentLng,
-            photoPath     = photoPath,
-            timestamp     = System.currentTimeMillis()
+            harvesterId  = harvesterId,
+            blockId      = blockId,
+            ripeBunches  = ripeStr.toIntOrNull() ?: 0,
+            emptyBunches = emptyStr.toIntOrNull() ?: 0,
+            latitude     = currentLat,
+            longitude    = currentLng,
+            photoPath    = photoPath,
+            timestamp    = System.currentTimeMillis()
         )
 
         lifecycleScope.launch {
@@ -143,15 +168,6 @@ class NewEntryActivity : AppCompatActivity() {
             toast("Entry saved!")
             setResult(RESULT_OK)
             finish()
-        }
-    }
-
-    override fun onRequestPermissionsResult(
-        requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == LOCATION_REQUEST &&
-            grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) {
-            fetchLocation()
         }
     }
 
