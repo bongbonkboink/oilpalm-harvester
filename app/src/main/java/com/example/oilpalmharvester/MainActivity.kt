@@ -71,7 +71,8 @@ class MainActivity : AppCompatActivity() {
         btnNavSync.setOnClickListener     { showTab("sync") }
 
         btnNewEntry.setOnClickListener {
-            Toast.makeText(this, "Harvest logging coming in Stage 2!", Toast.LENGTH_SHORT).show()
+            val intent = android.content.Intent(this, NewEntryActivity::class.java)
+            startActivityForResult(intent, 200)
         }
 
         if (hid.isEmpty()) promptForHarvesterId()
@@ -204,4 +205,5 @@ class MainActivity : AppCompatActivity() {
         btService.disconnect()
     }
 }
+
 
