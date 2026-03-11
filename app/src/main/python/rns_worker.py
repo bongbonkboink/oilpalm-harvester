@@ -381,3 +381,5 @@ def get_announces():
 
 def get_address():
     return RNS.prettyhexrep(destination.hash) if destination else "Not initialized"
+
+
