@@ -9,7 +9,7 @@
 
     <application
         android:allowBackup="true"
-        android:label="RNS Hello"
+        android:label="OilPalm Harvester"
         android:theme="@style/Theme.AppCompat.Light.DarkActionBar">
         <activity android:name=".MainActivity" android:exported="true">
             <intent-filter>

@@ -1,4 +1,4 @@
-package com.example.rnshello
+package com.example.oilpalmharvester
 
 import com.chaquo.python.PyObject
 import com.chaquo.python.Python

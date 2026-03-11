@@ -21,7 +21,7 @@ seen_announces = []
 known_identities = {}  # hash_hex -> RNS.Identity, populated from announces
 contacts = {}  # hash_hex -> nickname string, persisted to disk
 
-CONTACTS_PATH = "/data/data/com.example.rnshello/files/contacts.json"
+CONTACTS_PATH = "/data/data/com.example.oilpalmharvester/files/contacts.json"
 
 def load_contacts():
     global contacts
@@ -234,7 +234,7 @@ def _rns_main(bt_socket_wrapper):
     try:
         configure_rnode(bt_socket_wrapper)
 
-        configdir = "/data/data/com.example.rnshello/files/.reticulum"
+        configdir = "/data/data/com.example.oilpalmharvester/files/.reticulum"
         os.makedirs(configdir, exist_ok=True)
         with open(os.path.join(configdir, "config"), "w") as f:
             f.write(RNS_CONFIG)
@@ -248,7 +248,7 @@ def _rns_main(bt_socket_wrapper):
         iface = AndroidBTInterface(RNS.Transport, "RNodeBT", bt_socket_wrapper)
         RNS.Transport.interfaces.append(iface)
 
-        identity_path = "/data/data/com.example.rnshello/files/identity"
+        identity_path = "/data/data/com.example.oilpalmharvester/files/identity"
         identity = None
         if os.path.exists(identity_path):
             try:
@@ -270,7 +270,7 @@ def _rns_main(bt_socket_wrapper):
                 RNS.log("Address will change on next restart!")
 
         lxmf_router = LXMF.LXMRouter(
-            storagepath="/data/data/com.example.rnshello/files/lxmf",
+            storagepath="/data/data/com.example.oilpalmharvester/files/lxmf",
             autopeer=True
         )
 

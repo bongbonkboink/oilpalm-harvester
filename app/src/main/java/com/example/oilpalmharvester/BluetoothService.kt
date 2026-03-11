@@ -1,4 +1,4 @@
-package com.example.rnshello
+package com.example.oilpalmharvester
 
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothSocket

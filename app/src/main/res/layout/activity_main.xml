@@ -1,160 +1,181 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
     android:background="#1a1a2e">
 
-    <!-- Header -->
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:padding="12dp"
-        android:background="#16213e">
-
+        android:layout_height="56dp"
+        android:background="#0f3460"
+        android:gravity="center_vertical"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp">
         <TextView
-            android:id="@+id/tvMyAddress"
-            android:layout_width="match_parent"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:text="My address: not connected"
+            android:layout_weight="1"
+            android:text="OilPalm Harvester"
             android:textColor="#00d4ff"
-            android:textSize="11sp"
-            android:fontFamily="monospace"/>
-
-        <LinearLayout
-            android:layout_width="match_parent"
+            android:textSize="18sp"
+            android:textStyle="bold"/>
+        <TextView
+            android:id="@+id/tvHarvesterId"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:layout_marginTop="8dp">
-
-            <Spinner
-                android:id="@+id/spinnerDevices"
-                android:layout_width="0dp"
-                android:layout_height="40dp"
-                android:layout_weight="1"
-                android:background="#0f3460"
-                android:paddingStart="8dp"/>
-
-            <Button
-                android:id="@+id/btnConnect"
-                android:layout_width="wrap_content"
-                android:layout_height="40dp"
-                android:text="Connect"
-                android:textSize="12sp"
-                android:backgroundTint="#00d4ff"
-                android:textColor="#1a1a2e"
-                android:layout_marginStart="8dp"/>
-        </LinearLayout>
+            android:text="ID: -"
+            android:textColor="#aaaaaa"
+            android:textSize="12sp"/>
     </LinearLayout>
 
-    <!-- Tabs -->
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="40dp"
-        android:orientation="horizontal">
-
-        <Button
-            android:id="@+id/btnTabChat"
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="1"
-            android:text="Chat"
-            android:textSize="13sp"
-            android:backgroundTint="#00d4ff"
-            android:textColor="#1a1a2e"/>
-
-        <Button
-            android:id="@+id/btnTabAnnounces"
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="1"
-            android:text="Network"
-            android:textSize="13sp"
-            android:backgroundTint="#0f3460"
-            android:textColor="#ffffff"/>
-    </LinearLayout>
-
-    <!-- Chat panel -->
-    <LinearLayout
-        android:id="@+id/panelChat"
+    <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="1"
-        android:orientation="vertical">
+        android:layout_weight="1">
 
-        <EditText
-            android:id="@+id/etDestHash"
+        <LinearLayout
+            android:id="@+id/panelLog"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:hint="Destination address (hex)"
-            android:textColorHint="#666666"
-            android:textColor="#ffffff"
-            android:textSize="11sp"
-            android:fontFamily="monospace"
-            android:background="#0f3460"
-            android:padding="8dp"
-            android:singleLine="true"
-            android:inputType="textNoSuggestions"/>
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:padding="32dp"
+            android:visibility="visible">
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Today's Harvest"
+                android:textColor="#ffffff"
+                android:textSize="22sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="8dp"/>
+            <TextView
+                android:id="@+id/tvTodaySummary"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="No entries yet"
+                android:textColor="#aaaaaa"
+                android:textSize="15sp"
+                android:layout_marginBottom="32dp"/>
+            <Button
+                android:id="@+id/btnNewEntry"
+                android:layout_width="220dp"
+                android:layout_height="56dp"
+                android:text="+ New Harvest Entry"
+                android:textSize="16sp"
+                android:backgroundTint="#00d4ff"
+                android:textColor="#1a1a2e"/>
+        </LinearLayout>
 
         <ScrollView
-            android:id="@+id/scrollChat"
+            android:id="@+id/panelRecords"
             android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1"
-            android:padding="8dp">
-
+            android:layout_height="match_parent"
+            android:visibility="gone">
             <LinearLayout
-                android:id="@+id/chatContainer"
+                android:id="@+id/recordsContainer"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="vertical"/>
+                android:orientation="vertical"
+                android:padding="12dp"/>
         </ScrollView>
 
         <LinearLayout
+            android:id="@+id/panelCalendar"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:padding="8dp"
-            android:background="#16213e">
-
-            <EditText
-                android:id="@+id/etMessage"
-                android:layout_width="0dp"
-                android:layout_height="48dp"
-                android:layout_weight="1"
-                android:hint="Type a message..."
-                android:textColorHint="#666666"
-                android:textColor="#ffffff"
-                android:background="#0f3460"
-                android:padding="8dp"
-                android:inputType="textMultiLine"/>
-
-            <Button
-                android:id="@+id/btnSend"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:padding="12dp"
+            android:visibility="gone">
+            <TextView
+                android:id="@+id/tvCalendarMonth"
                 android:layout_width="wrap_content"
-                android:layout_height="48dp"
-                android:text="Send"
-                android:backgroundTint="#00d4ff"
-                android:textColor="#1a1a2e"
-                android:layout_marginStart="8dp"/>
+                android:layout_height="wrap_content"
+                android:textColor="#00d4ff"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="8dp"
+                android:text="Month View"/>
+            <GridLayout
+                android:id="@+id/calendarGrid"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:columnCount="7"/>
         </LinearLayout>
-    </LinearLayout>
-
-    <!-- Announces panel -->
-    <ScrollView
-        android:id="@+id/panelAnnounces"
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
-        android:visibility="gone"
-        android:padding="8dp">
 
         <LinearLayout
-            android:id="@+id/announcesContainer"
+            android:id="@+id/panelSync"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"/>
-    </ScrollView>
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:padding="24dp"
+            android:visibility="gone">
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="RNS Sync"
+                android:textColor="#ffffff"
+                android:textSize="20sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="16dp"/>
+            <Spinner
+                android:id="@+id/spinnerDevices"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:layout_marginBottom="8dp"/>
+            <Button
+                android:id="@+id/btnConnect"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:text="Connect to RNode"
+                android:backgroundTint="#0f3460"
+                android:textColor="#00d4ff"
+                android:layout_marginBottom="16dp"/>
+            <TextView
+                android:id="@+id/tvMyAddress"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Not connected"
+                android:textColor="#aaaaaa"
+                android:textSize="11sp"
+                android:fontFamily="monospace"
+                android:layout_marginBottom="16dp"/>
+            <Button
+                android:id="@+id/btnSyncNow"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:text="Sync Records Now"
+                android:backgroundTint="#00d4ff"
+                android:textColor="#1a1a2e"
+                android:enabled="false"/>
+        </LinearLayout>
+
+    </FrameLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:background="#0f3460"
+        android:orientation="horizontal">
+        <Button android:id="@+id/btnNavLog"
+            android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"
+            android:text="Log" android:textSize="11sp" android:textColor="#1a1a2e"
+            android:backgroundTint="#00d4ff"/>
+        <Button android:id="@+id/btnNavRecords"
+            android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"
+            android:text="Records" android:textSize="11sp" android:textColor="#ffffff"
+            android:backgroundTint="#0f3460"/>
+        <Button android:id="@+id/btnNavCalendar"
+            android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"
+            android:text="Calendar" android:textSize="11sp" android:textColor="#ffffff"
+            android:backgroundTint="#0f3460"/>
+        <Button android:id="@+id/btnNavSync"
+            android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"
+            android:text="Sync" android:textSize="11sp" android:textColor="#ffffff"
+            android:backgroundTint="#0f3460"/>
+    </LinearLayout>
 
 </LinearLayout>
