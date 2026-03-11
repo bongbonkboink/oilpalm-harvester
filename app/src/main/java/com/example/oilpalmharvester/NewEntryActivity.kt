@@ -4,18 +4,20 @@ import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.BitmapFactory
-import android.location.Location
+import android.graphics.Matrix
 import android.net.Uri
 import android.os.Bundle
 import android.os.Environment
+import android.os.Looper
 import android.provider.MediaStore
 import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
+import androidx.exifinterface.media.ExifInterface
 import androidx.lifecycle.lifecycleScope
-import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.*
 import kotlinx.coroutines.launch
 import java.io.File
 import java.text.SimpleDateFormat
@@ -32,13 +34,15 @@ class NewEntryActivity : AppCompatActivity() {
     private lateinit var btnSaveEntry: Button
     private lateinit var btnCancel: Button
 
+    private lateinit var fusedLocationClient: FusedLocationProviderClient
+    private var locationCallback: LocationCallback? = null
+
     private var currentLat: Double = 0.0
     private var currentLng: Double = 0.0
     private var photoPath: String = ""
     private var photoUri: Uri? = null
 
-    private val REQ_CAMERA   = 101
-    private val REQ_LOCATION = 102
+    private val REQ_CAMERA      = 101
     private val REQ_PERMISSIONS = 103
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -53,6 +57,8 @@ class NewEntryActivity : AppCompatActivity() {
         ivPhotoPreview = findViewById(R.id.ivPhotoPreview)
         btnSaveEntry   = findViewById(R.id.btnSaveEntry)
         btnCancel      = findViewById(R.id.btnCancel)
+
+        fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
 
         requestAllPermissions()
 
@@ -72,9 +78,11 @@ class NewEntryActivity : AppCompatActivity() {
     private fun requestAllPermissions() {
         val needed = mutableListOf<String>()
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
-            != PackageManager.PERMISSION_GRANTED) needed += Manifest.permission.CAMERA
+            != PackageManager.PERMISSION_GRANTED)
+            needed += Manifest.permission.CAMERA
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
-            != PackageManager.PERMISSION_GRANTED) needed += Manifest.permission.ACCESS_FINE_LOCATION
+            != PackageManager.PERMISSION_GRANTED)
+            needed += Manifest.permission.ACCESS_FINE_LOCATION
         if (needed.isNotEmpty()) {
             ActivityCompat.requestPermissions(this, needed.toTypedArray(), REQ_PERMISSIONS)
         } else {
@@ -86,10 +94,8 @@ class NewEntryActivity : AppCompatActivity() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
             != PackageManager.PERMISSION_GRANTED) return
 
-        val client = LocationServices.getFusedLocationProviderClient(this)
-
-        // First try last known location
-        client.lastLocation.addOnSuccessListener { loc ->
+        // Try last known location first
+        fusedLocationClient.lastLocation.addOnSuccessListener { loc ->
             if (loc != null) {
                 currentLat = loc.latitude
                 currentLng = loc.longitude
@@ -98,29 +104,25 @@ class NewEntryActivity : AppCompatActivity() {
             }
         }
 
-        // Also request a fresh update
-        val request = com.google.android.gms.location.LocationRequest.Builder(
-            com.google.android.gms.location.Priority.PRIORITY_HIGH_ACCURACY, 5000L)
+        // Request a fresh fix
+        val request = LocationRequest.Builder(
+            Priority.PRIORITY_HIGH_ACCURACY, 5000L)
             .setMinUpdateIntervalMillis(2000L)
-            .setMaxUpdates(1)
+            .setMaxUpdates(3)
             .build()
 
-        val callback = object : com.google.android.gms.location.LocationCallback() {
-            override fun onLocationResult(result: com.google.android.gms.location.LocationResult) {
+        locationCallback = object : LocationCallback() {
+            override fun onLocationResult(result: LocationResult) {
                 val loc = result.lastLocation ?: return
                 currentLat = loc.latitude
                 currentLng = loc.longitude
                 tvGpsStatus.text = "GPS: %.6f, %.6f".format(currentLat, currentLng)
                 tvGpsStatus.setTextColor(android.graphics.Color.parseColor("#00d4ff"))
-                client.removeLocationUpdates(this)
             }
         }
-        client.requestLocationUpdates(request, callback,
-            android.os.Looper.getMainLooper())
-    } else {
-                    tvGpsStatus.text = "GPS: No fix yet (will save 0,0)"
-                }
-            }
+
+        fusedLocationClient.requestLocationUpdates(
+            request, locationCallback!!, Looper.getMainLooper())
     }
 
     private fun launchCamera() {
@@ -138,7 +140,7 @@ class NewEntryActivity : AppCompatActivity() {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == REQ_CAMERA && resultCode == RESULT_OK) {
-            val bitmap = loadCorrectlyRotatedBitmap(photoPath)
+            val bitmap = loadRotatedBitmap(photoPath)
             ivPhotoPreview.setImageBitmap(bitmap)
             ivPhotoPreview.visibility = android.view.View.VISIBLE
             btnTakePhoto.text = "Retake Photo"
@@ -149,18 +151,29 @@ class NewEntryActivity : AppCompatActivity() {
         requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         when (requestCode) {
-            REQ_PERMISSIONS, REQ_LOCATION -> {
-                // Try fetching location if granted
-                fetchLocation()
-            }
+            REQ_PERMISSIONS -> fetchLocation()
             REQ_CAMERA -> {
-                if (grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) {
+                if (grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED)
                     launchCamera()
-                } else {
+                else
                     toast("Camera permission is required")
-                }
             }
         }
+    }
+
+    private fun loadRotatedBitmap(path: String): android.graphics.Bitmap {
+        val bitmap = BitmapFactory.decodeFile(path)
+        val exif = ExifInterface(path)
+        val orientation = exif.getAttributeInt(
+            ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)
+        val matrix = Matrix()
+        when (orientation) {
+            ExifInterface.ORIENTATION_ROTATE_90  -> matrix.postRotate(90f)
+            ExifInterface.ORIENTATION_ROTATE_180 -> matrix.postRotate(180f)
+            ExifInterface.ORIENTATION_ROTATE_270 -> matrix.postRotate(270f)
+        }
+        return android.graphics.Bitmap.createBitmap(
+            bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
     }
 
     private fun saveEntry() {
@@ -168,9 +181,9 @@ class NewEntryActivity : AppCompatActivity() {
         val ripeStr  = etRipeBunches.text.toString().trim()
         val emptyStr = etEmptyBunches.text.toString().trim()
 
-        if (blockId.isEmpty())  { toast("Enter a Block ID"); return }
-        if (ripeStr.isEmpty())  { toast("Enter ripe bunches count"); return }
-        if (emptyStr.isEmpty()) { toast("Enter empty bunches count"); return }
+        if (blockId.isEmpty())   { toast("Enter a Block ID"); return }
+        if (ripeStr.isEmpty())   { toast("Enter ripe bunches count"); return }
+        if (emptyStr.isEmpty())  { toast("Enter empty bunches count"); return }
         if (photoPath.isEmpty()) { toast("Photo is required"); return }
 
         val prefs = getSharedPreferences("oilpalm", MODE_PRIVATE)
@@ -196,24 +209,11 @@ class NewEntryActivity : AppCompatActivity() {
         }
     }
 
-        private fun loadCorrectlyRotatedBitmap(path: String): android.graphics.Bitmap {
-        val bitmap = BitmapFactory.decodeFile(path)
-        val exif = androidx.exifinterface.media.ExifInterface(path)
-        val rotation = exif.getAttributeInt(
-            androidx.exifinterface.media.ExifInterface.TAG_ORIENTATION,
-            androidx.exifinterface.media.ExifInterface.ORIENTATION_NORMAL)
-        val matrix = android.graphics.Matrix()
-        when (rotation) {
-            androidx.exifinterface.media.ExifInterface.ORIENTATION_ROTATE_90  -> matrix.postRotate(90f)
-            androidx.exifinterface.media.ExifInterface.ORIENTATION_ROTATE_180 -> matrix.postRotate(180f)
-            androidx.exifinterface.media.ExifInterface.ORIENTATION_ROTATE_270 -> matrix.postRotate(270f)
-        }
-        return android.graphics.Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+    override fun onDestroy() {
+        super.onDestroy()
+        locationCallback?.let { fusedLocationClient.removeLocationUpdates(it) }
     }
 
     private fun toast(msg: String) =
         Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
 }
-
-
-
