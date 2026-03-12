@@ -13,6 +13,7 @@ data class HarvestRecord(
     val latitude: Double,
     val longitude: Double,
     val photoPath: String,
-    val timestamp: Long,   // epoch millis
-    val synced: Boolean = false
+    val timestamp: Long,
+    val synced: Boolean = false,
+    val photoSynced: Boolean = false
 )

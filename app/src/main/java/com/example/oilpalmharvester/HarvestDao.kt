@@ -20,8 +20,14 @@ interface HarvestDao {
     @Query("SELECT * FROM harvest_records WHERE synced = 0 ORDER BY timestamp ASC")
     suspend fun getUnsynced(): List<HarvestRecord>
 
+    @Query("SELECT * FROM harvest_records WHERE photoSynced = 0 ORDER BY timestamp ASC")
+    suspend fun getUnsyncedPhotos(): List<HarvestRecord>
+
     @Query("UPDATE harvest_records SET synced = 1 WHERE id = :id")
     suspend fun markSynced(id: Long)
+
+    @Query("UPDATE harvest_records SET photoSynced = 1 WHERE id = :id")
+    suspend fun markPhotoSynced(id: Long)
 
     @Query("DELETE FROM harvest_records WHERE id = :id")
     suspend fun deleteById(id: Long)

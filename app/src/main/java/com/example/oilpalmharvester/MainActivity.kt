@@ -2,6 +2,7 @@ package com.example.oilpalmharvester
 
 import android.Manifest
 import android.bluetooth.BluetoothManager
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.BitmapFactory
 import android.graphics.Color
@@ -14,11 +15,13 @@ import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
 import androidx.exifinterface.media.ExifInterface
 import androidx.lifecycle.lifecycleScope
 import com.chaquo.python.Python
 import com.chaquo.python.android.AndroidPlatform
 import kotlinx.coroutines.*
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -45,6 +48,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tvBaseStationAddr: TextView
     private lateinit var tvUnsyncedCount: TextView
     private lateinit var btnSyncNow: Button
+    private lateinit var btnSendPhotos: Button
     private lateinit var tvSyncLog: TextView
 
     private val btService = BluetoothService()
@@ -78,6 +82,7 @@ class MainActivity : AppCompatActivity() {
         tvBaseStationAddr = findViewById(R.id.tvBaseStationAddr)
         tvUnsyncedCount  = findViewById(R.id.tvUnsyncedCount)
         btnSyncNow       = findViewById(R.id.btnSyncNow)
+        btnSendPhotos    = findViewById(R.id.btnSendPhotos)
         tvSyncLog        = findViewById(R.id.tvSyncLog)
 
         if (!Python.isStarted()) Python.start(AndroidPlatform(this))
@@ -91,7 +96,7 @@ class MainActivity : AppCompatActivity() {
         calendarMonth = cal.get(Calendar.MONTH)
 
         btnSettings.setOnClickListener {
-            startActivity(android.content.Intent(this, SettingsActivity::class.java))
+            startActivity(Intent(this, SettingsActivity::class.java))
         }
         btnNavLog.setOnClickListener      { showTab("log") }
         btnNavRecords.setOnClickListener  { showTab("records") }
@@ -99,11 +104,11 @@ class MainActivity : AppCompatActivity() {
         btnNavSync.setOnClickListener     { showTab("sync") }
 
         btnNewEntry.setOnClickListener {
-            startActivityForResult(
-                android.content.Intent(this, NewEntryActivity::class.java), 200)
+            startActivityForResult(Intent(this, NewEntryActivity::class.java), 200)
         }
 
-        btnSyncNow.setOnClickListener { startSync() }
+        btnSyncNow.setOnClickListener    { startCsvSync() }
+        btnSendPhotos.setOnClickListener { sendPendingPhotos() }
 
         if (hid.isEmpty()) promptForHarvesterId()
         requestBtPermissions()
@@ -113,17 +118,17 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         val prefs = getSharedPreferences("oilpalm", MODE_PRIVATE)
-        val hid = prefs.getString("harvester_id", "") ?: ""
+        val hid  = prefs.getString("harvester_id", "") ?: ""
         if (hid.isNotEmpty()) tvHarvesterId.text = "ID: $hid"
         val base = prefs.getString("base_station_address", "") ?: ""
-        tvBaseStationAddr.text = if (base.isEmpty()) "Not set — go to Settings ?" else base
+        tvBaseStationAddr.text = if (base.isEmpty()) "Not set - go to Settings" else base
         tvBaseStationAddr.setTextColor(
             if (base.isEmpty()) Color.parseColor("#555555")
             else Color.parseColor("#00d4ff"))
         refreshUnsyncedCount()
     }
 
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: android.content.Intent?) {
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == 200 && resultCode == RESULT_OK) refreshTodaySummary()
     }
@@ -146,79 +151,119 @@ class MainActivity : AppCompatActivity() {
 
     private fun refreshUnsyncedCount() {
         lifecycleScope.launch {
-            val unsynced = HarvestDatabase.getInstance(this@MainActivity)
-                .harvestDao().getUnsynced()
-            tvUnsyncedCount.text = "${unsynced.size} record(s) not yet synced"
+            val dao      = HarvestDatabase.getInstance(this@MainActivity).harvestDao()
+            val unsynced = dao.getUnsynced()
+            val noPhoto  = dao.getUnsyncedPhotos()
+            tvUnsyncedCount.text =
+                "${unsynced.size} CSV record(s) pending  |  ${noPhoto.size} photo(s) pending"
         }
     }
 
-    private fun startSync() {
-        val prefs = getSharedPreferences("oilpalm", MODE_PRIVATE)
+    // -- CSV sync via RNS ------------------------------------------------------
+
+    private fun startCsvSync() {
+        val prefs    = getSharedPreferences("oilpalm", MODE_PRIVATE)
         val baseAddr = prefs.getString("base_station_address", "") ?: ""
-        if (baseAddr.isEmpty()) {
-            toast("Set base station address in Settings first")
-            return
-        }
-        if (!rnsConnected) {
-            toast("Connect to RNode first")
-            return
-        }
+        if (baseAddr.isEmpty()) { toast("Set base station address in Settings first"); return }
+        if (!rnsConnected)      { toast("Connect to RNode first"); return }
 
         btnSyncNow.isEnabled = false
         btnSyncNow.text = "Syncing..."
-        appendSyncLog("Starting sync...")
+        appendSyncLog("Starting CSV sync...")
 
         scope.launch {
-            val dao = HarvestDatabase.getInstance(this@MainActivity).harvestDao()
+            val dao      = HarvestDatabase.getInstance(this@MainActivity).harvestDao()
             val unsynced = withContext(Dispatchers.IO) { dao.getUnsynced() }
 
             if (unsynced.isEmpty()) {
-                appendSyncLog("Nothing to sync.")
+                appendSyncLog("No unsynced records.")
                 btnSyncNow.isEnabled = true
-                btnSyncNow.text = "Sync Now"
+                btnSyncNow.text = "Sync CSV via RNS"
                 return@launch
             }
 
             appendSyncLog("${unsynced.size} record(s) to send...")
 
-            // Build CSV
             val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
-            val sb = StringBuilder()
+            val sb  = StringBuilder()
             sb.appendLine("id,harvester_id,block_id,ripe_bunches,empty_bunches,latitude,longitude,timestamp,photo_file")
             for (r in unsynced) {
-                val photoFile = java.io.File(r.photoPath).name
-                sb.appendLine("${r.id},${r.harvesterId},${r.blockId},${r.ripeBunches},${r.emptyBunches},${r.latitude},${r.longitude},${sdf.format(Date(r.timestamp))},$photoFile")
+                sb.appendLine("${r.id},${r.harvesterId},${r.blockId},${r.ripeBunches}," +
+                    "${r.emptyBunches},${r.latitude},${r.longitude}," +
+                    "${sdf.format(Date(r.timestamp))},${File(r.photoPath).name}")
             }
-            val csvText  = sb.toString()
-            val filename = "harvest_${SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())}.csv"
+            val filename = "harvest_${SimpleDateFormat("yyyyMMdd_HHmmss",
+                Locale.US).format(Date())}.csv"
 
-            // Send CSV
-            appendSyncLog("Sending CSV ($filename)...")
-            val csvResult = withContext(Dispatchers.IO) {
-                RNSBridge.sendCsv(baseAddr, csvText, filename)
+            appendSyncLog("Sending $filename...")
+            val result = withContext(Dispatchers.IO) {
+                RNSBridge.sendCsv(baseAddr, sb.toString(), filename)
             }
-            appendSyncLog("CSV: $csvResult")
+            appendSyncLog("Result: $result")
 
-            if (csvResult == "OK") {
-                // Send photos one by one
+            if (result == "OK") {
                 for (r in unsynced) {
-                    appendSyncLog("Sending photo for block ${r.blockId}...")
-                    val photoResult = withContext(Dispatchers.IO) {
-                        RNSBridge.sendPhoto(baseAddr, r.photoPath, r.id)
-                    }
-                    appendSyncLog("Photo ${r.id}: $photoResult")
-                    if (photoResult == "OK") {
-                        withContext(Dispatchers.IO) { dao.markSynced(r.id) }
-                    }
+                    withContext(Dispatchers.IO) { dao.markSynced(r.id) }
                 }
-                appendSyncLog("Sync complete!")
+                appendSyncLog("All ${unsynced.size} records marked as synced.")
                 refreshUnsyncedCount()
             } else {
-                appendSyncLog("CSV failed, aborting. Check connection.")
+                appendSyncLog("Failed. Check RNS connection.")
             }
 
             btnSyncNow.isEnabled = true
-            btnSyncNow.text = "Sync Now"
+            btnSyncNow.text = "Sync CSV via RNS"
+        }
+    }
+
+    // -- Photo transfer via Bluetooth OBEX ------------------------------------
+
+    private fun sendPendingPhotos() {
+        lifecycleScope.launch {
+            val dao     = HarvestDatabase.getInstance(this@MainActivity).harvestDao()
+            val pending = dao.getUnsyncedPhotos()
+
+            if (pending.isEmpty()) {
+                toast("No pending photos")
+                return@launch
+            }
+
+            appendSyncLog("Sending ${pending.size} photo(s) via Bluetooth...")
+
+            for (record in pending) {
+                val file = File(record.photoPath)
+                if (!file.exists()) {
+                    appendSyncLog("Photo missing for block ${record.blockId}, skipping")
+                    dao.markPhotoSynced(record.id)
+                    continue
+                }
+
+                // Use Android's built-in Bluetooth file share (OBEX)
+                val uri = FileProvider.getUriForFile(
+                    this@MainActivity,
+                    "com.example.oilpalmharvester.fileprovider",
+                    file)
+
+                val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                    type = "image/jpeg"
+                    putExtra(Intent.EXTRA_STREAM, uri)
+                    putExtra(Intent.EXTRA_SUBJECT,
+                        "Harvest photo - Block ${record.blockId}")
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+
+                // Launch the BT share chooser for this photo
+                startActivity(Intent.createChooser(
+                    shareIntent,
+                    "Send photo for block ${record.blockId}"))
+
+                // Mark as photo-synced — user is responsible for completing the transfer
+                dao.markPhotoSynced(record.id)
+                appendSyncLog("Shared: Block ${record.blockId}")
+            }
+
+            appendSyncLog("All photos shared. Accept on base station device.")
+            refreshUnsyncedCount()
         }
     }
 
@@ -226,6 +271,8 @@ class MainActivity : AppCompatActivity() {
         val ts = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())
         tvSyncLog.text = "[$ts] $msg\n${tvSyncLog.text}"
     }
+
+    // -- Tab navigation --------------------------------------------------------
 
     private fun showTab(tab: String) {
         val cyan     = ColorStateList.valueOf(Color.parseColor("#00d4ff"))
@@ -270,6 +317,8 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // -- Records list ---------------------------------------------------------
+
     private fun loadRecords() {
         lifecycleScope.launch {
             val records = HarvestDatabase.getInstance(this@MainActivity)
@@ -307,8 +356,8 @@ class MainActivity : AppCompatActivity() {
                 card.addView(thumb)
                 val info = LinearLayout(this@MainActivity).apply {
                     orientation = LinearLayout.VERTICAL
-                    layoutParams = LinearLayout.LayoutParams(0,
-                        LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+                    layoutParams = LinearLayout.LayoutParams(
+                        0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
                 }
                 info.addView(TextView(this@MainActivity).apply {
                     text = "Block: ${record.blockId}"
@@ -328,9 +377,10 @@ class MainActivity : AppCompatActivity() {
                     typeface = android.graphics.Typeface.MONOSPACE
                 })
                 info.addView(TextView(this@MainActivity).apply {
-                    text = sdf.format(Date(record.timestamp)) +
-                           if (record.synced) "  ? synced" else "  ? pending"
-                    setTextColor(if (record.synced) Color.parseColor("#00d4ff") else Color.GRAY)
+                    val csvStatus   = if (record.synced) "CSV sent" else "CSV pending"
+                    val photoStatus = if (record.photoSynced) "Photo sent" else "Photo pending"
+                    text = "${sdf.format(Date(record.timestamp))}  |  $csvStatus  |  $photoStatus"
+                    setTextColor(Color.GRAY)
                     textSize = 10f
                 })
                 card.addView(info)
@@ -342,7 +392,7 @@ class MainActivity : AppCompatActivity() {
                             lifecycleScope.launch {
                                 HarvestDatabase.getInstance(this@MainActivity)
                                     .harvestDao().deleteById(record.id)
-                                try { java.io.File(record.photoPath).delete() } catch (_: Exception) {}
+                                try { File(record.photoPath).delete() } catch (_: Exception) {}
                                 loadRecords()
                                 refreshTodaySummary()
                             }
@@ -354,6 +404,8 @@ class MainActivity : AppCompatActivity() {
             }
         }
     }
+
+    // -- Calendar -------------------------------------------------------------
 
     private fun loadCalendar() {
         lifecycleScope.launch {
@@ -406,18 +458,18 @@ class MainActivity : AppCompatActivity() {
             val daysInMonth = firstCal.getActualMaximum(Calendar.DAY_OF_MONTH)
             val today = Calendar.getInstance()
             for (day in 1..daysInMonth) {
-                val total = dailyTotals[day] ?: 0
-                val isToday = calendarYear == today.get(Calendar.YEAR) &&
+                val total   = dailyTotals[day] ?: 0
+                val isToday = calendarYear  == today.get(Calendar.YEAR) &&
                               calendarMonth == today.get(Calendar.MONTH) &&
-                              day == today.get(Calendar.DAY_OF_MONTH)
+                              day           == today.get(Calendar.DAY_OF_MONTH)
                 val cell = LinearLayout(this@MainActivity).apply {
                     orientation = LinearLayout.VERTICAL
                     gravity = android.view.Gravity.CENTER
                     setPadding(2, 6, 2, 6)
                     setBackgroundColor(when {
-                        isToday    -> Color.parseColor("#0f3460")
-                        total > 0  -> Color.parseColor("#1a3a1a")
-                        else       -> Color.parseColor("#1a1a2e")
+                        isToday   -> Color.parseColor("#0f3460")
+                        total > 0 -> Color.parseColor("#1a3a1a")
+                        else      -> Color.parseColor("#1a1a2e")
                     })
                     layoutParams = android.widget.GridLayout.LayoutParams().apply {
                         width = 0
@@ -444,6 +496,8 @@ class MainActivity : AppCompatActivity() {
             }
         }
     }
+
+    // -- Helpers ---------------------------------------------------------------
 
     private fun loadRotatedBitmap(path: String): android.graphics.Bitmap {
         val bitmap = BitmapFactory.decodeFile(path)
@@ -475,7 +529,7 @@ class MainActivity : AppCompatActivity() {
                 if (id.isNotEmpty()) {
                     getSharedPreferences("oilpalm", MODE_PRIVATE)
                         .edit().putString("harvester_id", id).apply()
-                    tvHarvesterId.text = "ID: $id"
+                    tvHarvesterId.text = "ID: $hid"
                     toast("Harvester ID saved!")
                 }
             }.show()

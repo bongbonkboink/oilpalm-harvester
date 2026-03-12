@@ -5,7 +5,9 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 
-@Database(entities = [HarvestRecord::class], version = 1, exportSchema = false)
+@Database(entities = [HarvestRecord::class], version = 2, exportSchema = false,
+    autoMigrations = []
+)
 abstract class HarvestDatabase : RoomDatabase() {
     abstract fun harvestDao(): HarvestDao
 
@@ -18,8 +20,9 @@ abstract class HarvestDatabase : RoomDatabase() {
                     context.applicationContext,
                     HarvestDatabase::class.java,
                     "harvest_db"
-                ).build().also { INSTANCE = it }
+                ).fallbackToDestructiveMigration().build().also { INSTANCE = it }
             }
         }
     }
 }
+
