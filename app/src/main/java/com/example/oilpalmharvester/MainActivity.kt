@@ -699,10 +699,26 @@ class MainActivity : AppCompatActivity() {
         val bm = getSystemService(BLUETOOTH_SERVICE) as BluetoothManager
         val ba = bm.adapter ?: run { toast("No Bluetooth!"); return }
         val paired = ba.bondedDevices?.toList() ?: emptyList()
-        spinnerDevices.adapter = ArrayAdapter(
-            this, android.R.layout.simple_spinner_item,
-            paired.map { "${it.name} (${it.address})" }
-        ).also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
+                val deviceNames = paired.map { "${it.name} (${it.address})" }
+        val spinnerAdapter = object : ArrayAdapter<String>(
+            this, android.R.layout.simple_spinner_item, deviceNames) {
+            override fun getView(position: Int, convertView: android.view.View?, parent: android.view.ViewGroup): android.view.View {
+                val v = super.getView(position, convertView, parent)
+                (v as? TextView)?.setTextColor(Color.WHITE)
+                return v
+            }
+            override fun getDropDownView(position: Int, convertView: android.view.View?, parent: android.view.ViewGroup): android.view.View {
+                val v = super.getDropDownView(position, convertView, parent)
+                (v as? TextView)?.apply {
+                    setTextColor(Color.WHITE)
+                    setBackgroundColor(Color.parseColor("#0f3460"))
+                    setPadding(24, 20, 24, 20)
+                }
+                return v
+            }
+        }
+        spinnerAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        spinnerDevices.adapter = spinnerAdapter
 
         btnConnect.setOnClickListener {
             val idx = spinnerDevices.selectedItemPosition
@@ -740,6 +756,7 @@ class MainActivity : AppCompatActivity() {
     private fun toast(msg: String) =
         Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
 }
+
 
 
 
