@@ -89,7 +89,7 @@ class MainActivity : AppCompatActivity() {
 
         val prefs = getSharedPreferences("oilpalm", MODE_PRIVATE)
         val hid = prefs.getString("harvester_id", "") ?: ""
-        if (hid.isNotEmpty()) tvHarvesterId.text = "ID: $id"
+        if (hid.isNotEmpty()) tvHarvesterId.text = "ID: $hid"
 
         val cal = Calendar.getInstance()
         calendarYear  = cal.get(Calendar.YEAR)
@@ -119,7 +119,7 @@ class MainActivity : AppCompatActivity() {
         super.onResume()
         val prefs = getSharedPreferences("oilpalm", MODE_PRIVATE)
         val hid  = prefs.getString("harvester_id", "") ?: ""
-        if (hid.isNotEmpty()) tvHarvesterId.text = "ID: $id"
+        if (hid.isNotEmpty()) tvHarvesterId.text = "ID: $hid"
         val base = prefs.getString("base_station_address", "") ?: ""
         tvBaseStationAddr.text = if (base.isEmpty()) "Not set - go to Settings" else base
         tvBaseStationAddr.setTextColor(
@@ -529,7 +529,7 @@ class MainActivity : AppCompatActivity() {
                 if (id.isNotEmpty()) {
                     getSharedPreferences("oilpalm", MODE_PRIVATE)
                         .edit().putString("harvester_id", id).apply()
-                    tvHarvesterId.text = "ID: $id"
+                    tvHarvesterId.text = "ID: $hid"
                     toast("Harvester ID saved!")
                 }
             }.show()
@@ -600,5 +600,6 @@ class MainActivity : AppCompatActivity() {
     private fun toast(msg: String) =
         Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
 }
+
 
 
