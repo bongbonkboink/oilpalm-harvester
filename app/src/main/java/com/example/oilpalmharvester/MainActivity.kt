@@ -156,10 +156,10 @@ class MainActivity : AppCompatActivity() {
             val records = dao.getForDay(start, end)
             val totalRipe  = records.sumOf { it.ripeBunches }
             val totalEmpty = records.sumOf { it.emptyBunches }
-            tvTodaySummary.text = if (records.isEmpty()) "No entries yet"
+                        tvTodaySummary.text = if (records.isEmpty()) "No entries yet"
+            else "${records.size} block(s)  |  Ripe: $totalRipe  |  Empty: $totalEmpty"
             tvStatRipe.text  = totalRipe.toString()
             tvStatEmpty.text = totalEmpty.toString()
-            else "${records.size} block(s)  |  Ripe: $totalRipe  |  Empty: $totalEmpty"
         }
     }
 
@@ -767,6 +767,7 @@ class MainActivity : AppCompatActivity() {
     private fun toast(msg: String) =
         Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
 }
+
 
 
 
