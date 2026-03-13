@@ -151,8 +151,8 @@
                     android:id="@+id/spinnerDevices"
                     android:layout_width="match_parent"
                     android:layout_height="48dp"
-                    android:layout_marginBottom="8dp"android:popupBackground="#0f3460"
-                    android:entries="@null"
+                    android:layout_marginBottom="8dp"
+                    android:popupBackground="#0f3460"
                     />
                 <Button
                     android:id="@+id/btnConnect"
@@ -267,6 +267,7 @@
     </LinearLayout>
 
 </LinearLayout>
+
 
 
 
