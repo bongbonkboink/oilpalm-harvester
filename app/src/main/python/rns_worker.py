@@ -1,4 +1,4 @@
-import RNS
+﻿import RNS
 import LXMF
 import threading
 import signal
@@ -140,7 +140,13 @@ class AndroidBTInterface(Interface):
         self.ifac_netkey           = None
         self.ifac_key              = None
         self.ifac_identity         = None
-        self.ifac_signature        = None
+        self.ifac_signature         = None
+        self.announce_rate_target   = None
+        self.announce_rate_grace    = None
+        self.announce_rate_penalty  = None
+        self.announce_allowed_at    = 0.0
+        self.announce_time          = None
+        self.stamp_cost             = None
         self.online                = True
         self._kiss_buf             = []
         self._in_frame             = False
@@ -381,5 +387,6 @@ def get_announces():
 
 def get_address():
     return RNS.prettyhexrep(destination.hash) if destination else "Not initialized"
+
 
 
