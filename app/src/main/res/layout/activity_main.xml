@@ -337,7 +337,8 @@
         <Button android:id="@+id/btnNavCalendar"
             android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"
             android:text="CAL" android:textSize="11sp" android:textColor="#ffffff"
-            android:backgroundTint="#0f3460"android:maxLines="1"
+            android:backgroundTint="#0f3460"
+            android:maxLines="1"
             android:ellipsize="end"
             />
         <Button android:id="@+id/btnNavSync"
@@ -347,6 +348,7 @@
     </LinearLayout>
 
 </LinearLayout>
+
 
 
 
