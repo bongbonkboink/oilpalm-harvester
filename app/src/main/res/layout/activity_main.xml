@@ -328,23 +328,25 @@
         android:orientation="horizontal">
         <Button android:id="@+id/btnNavLog"
             android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"
-            android:text="Log" android:textSize="13sp" android:textColor="#1a1a2e"
+            android:text="Log" android:textSize="11sp" android:textColor="#1a1a2e"
             android:backgroundTint="#00d4ff"/>
         <Button android:id="@+id/btnNavRecords"
             android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"
-            android:text="Records" android:textSize="13sp" android:textColor="#ffffff"
+            android:text="Records" android:textSize="11sp" android:textColor="#ffffff"
             android:backgroundTint="#0f3460"/>
         <Button android:id="@+id/btnNavCalendar"
             android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"
-            android:text="Calendar" android:textSize="13sp" android:textColor="#ffffff"
+            android:text="Cal" android:textSize="11sp" android:textColor="#ffffff"
             android:backgroundTint="#0f3460"/>
         <Button android:id="@+id/btnNavSync"
             android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"
-            android:text="Sync" android:textSize="13sp" android:textColor="#ffffff"
+            android:text="Sync" android:textSize="11sp" android:textColor="#ffffff"
             android:backgroundTint="#0f3460"/>
     </LinearLayout>
 
 </LinearLayout>
+
+
 
 
 

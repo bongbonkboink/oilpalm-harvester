@@ -495,7 +495,7 @@ class MainActivity : AppCompatActivity() {
                 calendarGrid.addView(android.view.View(this@MainActivity).apply {
                     layoutParams = android.widget.GridLayout.LayoutParams().apply {
                         width  = 0
-                        height = 80
+                        height  = 88
                         columnSpec = android.widget.GridLayout.spec(
                             android.widget.GridLayout.UNDEFINED, 1f)
                     }
@@ -518,7 +518,7 @@ class MainActivity : AppCompatActivity() {
                     })
                     layoutParams = android.widget.GridLayout.LayoutParams().apply {
                         width  = 0
-                        height = 80
+                        height  = 88
                         columnSpec = android.widget.GridLayout.spec(
                             android.widget.GridLayout.UNDEFINED, 1f)
                     }
@@ -529,7 +529,7 @@ class MainActivity : AppCompatActivity() {
                 cell.addView(TextView(this@MainActivity).apply {
                     text = "$day"
                     setTextColor(if (isToday) Color.parseColor("#00d4ff") else Color.WHITE)
-                    textSize = 12f
+                    textSize = 11f
                     gravity = android.view.Gravity.CENTER
                 })
                 if (hasData) {
@@ -767,6 +767,8 @@ class MainActivity : AppCompatActivity() {
     private fun toast(msg: String) =
         Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
 }
+
+
 
 
 
