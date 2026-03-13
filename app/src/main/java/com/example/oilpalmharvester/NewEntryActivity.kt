@@ -1,4 +1,4 @@
-package com.example.oilpalmharvester
+﻿package com.example.oilpalmharvester
 
 import android.Manifest
 import android.content.Intent
@@ -222,6 +222,7 @@ class NewEntryActivity : AppCompatActivity() {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == REQ_CAMERA && resultCode == RESULT_OK) {
+            compressPhoto(photoPath)
             ivPhotoPreview.setImageBitmap(loadRotatedBitmap(photoPath))
             ivPhotoPreview.visibility = android.view.View.VISIBLE
             btnTakePhoto.text = "Retake Photo"
@@ -308,6 +309,24 @@ class NewEntryActivity : AppCompatActivity() {
         locationCallback?.let { fusedLocationClient.removeLocationUpdates(it) }
     }
 
-    private fun toast(msg: String) =
+    private fun compressPhoto(path: String) {
+        try {
+            val original = loadRotatedBitmap(path)
+            val maxDim = 1024
+            val scale = minOf(maxDim.toFloat() / original.width, maxDim.toFloat() / original.height, 1f)
+            val w = (original.width  * scale).toInt()
+            val h = (original.height * scale).toInt()
+            val scaled = android.graphics.Bitmap.createScaledBitmap(original, w, h, true)
+            java.io.FileOutputStream(path).use { out ->
+                scaled.compress(android.graphics.Bitmap.CompressFormat.JPEG, 75, out)
+            }
+        } catch (e: Exception) {
+            // keep original if compression fails
+        }
+    }
+
+        private fun toast(msg: String) =
         Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
 }
+
+
