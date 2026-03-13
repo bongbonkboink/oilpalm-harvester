@@ -187,7 +187,6 @@ class MainActivity : AppCompatActivity() {
                 btnSyncNow.text = "Sync CSV via RNS"
                 return@launch
             }
- to send...")
 
             val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
             val sb  = StringBuilder()
@@ -227,7 +226,6 @@ class MainActivity : AppCompatActivity() {
                 toast("No pending photos")
                 return@launch
             }
- via Bluetooth...")
 
             for (record in pending) {
                 val file = File(record.photoPath)
@@ -742,6 +740,7 @@ class MainActivity : AppCompatActivity() {
     private fun toast(msg: String) =
         Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
 }
+
 
 
 
