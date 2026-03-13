@@ -699,25 +699,30 @@ class MainActivity : AppCompatActivity() {
         val bm = getSystemService(BLUETOOTH_SERVICE) as BluetoothManager
         val ba = bm.adapter ?: run { toast("No Bluetooth!"); return }
         val paired = ba.bondedDevices?.toList() ?: emptyList()
-                val deviceNames = paired.map { "${it.name} (${it.address})" }
+                        val deviceNames = paired.map { "${it.name} (${it.address})" }
+
         val spinnerAdapter = object : ArrayAdapter<String>(
             this, android.R.layout.simple_spinner_item, deviceNames) {
-            override fun getView(position: Int, convertView: android.view.View?, parent: android.view.ViewGroup): android.view.View {
-                val v = super.getView(position, convertView, parent)
-                (v as? TextView)?.setTextColor(Color.WHITE)
-                return v
+
+            override fun getView(pos: Int, cv: android.view.View?, parent: android.view.ViewGroup): android.view.View {
+                val tv = TextView(context)
+                tv.text = if (deviceNames.isEmpty()) "No paired devices" else deviceNames[pos]
+                tv.setTextColor(Color.WHITE)
+                tv.textSize = 14f
+                tv.setPadding(8, 24, 8, 24)
+                return tv
             }
-            override fun getDropDownView(position: Int, convertView: android.view.View?, parent: android.view.ViewGroup): android.view.View {
-                val v = super.getDropDownView(position, convertView, parent)
-                (v as? TextView)?.apply {
-                    setTextColor(Color.WHITE)
-                    setBackgroundColor(Color.parseColor("#0f3460"))
-                    setPadding(24, 20, 24, 20)
-                }
-                return v
+
+            override fun getDropDownView(pos: Int, cv: android.view.View?, parent: android.view.ViewGroup): android.view.View {
+                val tv = TextView(context)
+                tv.text = deviceNames[pos]
+                tv.setTextColor(Color.WHITE)
+                tv.textSize = 14f
+                tv.setPadding(32, 28, 32, 28)
+                tv.setBackgroundColor(Color.parseColor("#0f3460"))
+                return tv
             }
         }
-        spinnerAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
         spinnerDevices.adapter = spinnerAdapter
 
         btnConnect.setOnClickListener {
@@ -756,6 +761,7 @@ class MainActivity : AppCompatActivity() {
     private fun toast(msg: String) =
         Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
 }
+
 
 
 
