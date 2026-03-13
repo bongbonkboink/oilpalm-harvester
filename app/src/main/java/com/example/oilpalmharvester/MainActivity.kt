@@ -1,4 +1,4 @@
-package com.example.oilpalmharvester
+﻿package com.example.oilpalmharvester
 
 import android.Manifest
 import android.bluetooth.BluetoothManager
@@ -257,7 +257,7 @@ class MainActivity : AppCompatActivity() {
                     shareIntent,
                     "Send photo for block ${record.blockId}"))
 
-                // Mark as photo-synced � user is responsible for completing the transfer
+                // Mark as photo-synced — user is responsible for completing the transfer
                 dao.markPhotoSynced(record.id)
                 appendSyncLog("Shared: Block ${record.blockId}")
             }
@@ -600,3 +600,4 @@ class MainActivity : AppCompatActivity() {
     private fun toast(msg: String) =
         Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
 }
+
