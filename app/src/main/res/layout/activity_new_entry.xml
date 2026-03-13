@@ -9,52 +9,68 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="20dp">
+        android:padding="16dp">
 
+        <!-- Header -->
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="New Harvest Entry"
+            android:text="NEW HARVEST ENTRY"
             android:textColor="#00d4ff"
-            android:textSize="20sp"
+            android:textSize="18sp"
             android:textStyle="bold"
+            android:letterSpacing="0.1"
             android:layout_marginBottom="20dp"/>
 
-        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-            android:text="Block ID" android:textColor="#aaaaaa" android:textSize="12sp"/>
+        <!-- Block ID -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="BLOCK ID"
+            android:textColor="#aaaaaa"
+            android:textSize="13sp"
+            android:letterSpacing="0.1"
+            android:layout_marginBottom="6dp"/>
         <EditText
             android:id="@+id/etBlockId"
             android:layout_width="match_parent"
-            android:layout_height="56dp"
+            android:layout_height="72dp"
             android:hint="e.g. 98A"
             android:textColor="#ffffff"
             android:textColorHint="#555555"
             android:backgroundTint="#0f3460"
             android:inputType="text"
-            android:textSize="22sp"
+            android:textSize="26sp"
             android:textStyle="bold"
+            android:paddingStart="16dp"
             android:layout_marginBottom="20dp"/>
 
-        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-            android:text="Ripe Bunches" android:textColor="#aaaaaa" android:textSize="12sp"/>
+        <!-- Ripe Bunches -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="RIPE BUNCHES"
+            android:textColor="#aaaaaa"
+            android:textSize="13sp"
+            android:letterSpacing="0.1"
+            android:layout_marginBottom="6dp"/>
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
             android:gravity="center_vertical"
-            android:layout_marginBottom="4dp">
-            <EditText
-                android:id="@+id/etRipeBunches"
-                android:layout_width="80dp"
-                android:layout_height="56dp"
-                android:hint="0"
+            android:layout_marginBottom="6dp">
+            <Button
+                android:id="@+id/btnRipePad"
+                android:layout_width="0dp"
+                android:layout_height="80dp"
+                android:layout_weight="1"
+                android:text="0"
+                android:textSize="32sp"
+                android:textStyle="bold"
                 android:textColor="#ffffff"
-                android:textColorHint="#555555"
                 android:backgroundTint="#0f3460"
-                android:inputType="number"
-                android:textSize="24sp"
-                android:gravity="center"
-                android:layout_marginEnd="12dp"/>
+                android:layout_marginEnd="10dp"/>
             <SeekBar
                 android:id="@+id/seekRipe"
                 android:layout_width="0dp"
@@ -63,34 +79,47 @@
                 android:progressTint="#00d4ff"
                 android:thumbTint="#00d4ff"/>
         </LinearLayout>
+        <!-- Hidden EditText for value storage -->
+        <EditText
+            android:id="@+id/etRipeBunches"
+            android:layout_width="1dp"
+            android:layout_height="1dp"
+            android:inputType="number"
+            android:visibility="invisible"/>
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Slide or type (max 200)"
+            android:text="Tap number to enter via keypad"
             android:textColor="#555555"
-            android:textSize="10sp"
+            android:textSize="12sp"
             android:layout_marginBottom="16dp"/>
 
-        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-            android:text="Empty Bunches" android:textColor="#aaaaaa" android:textSize="12sp"/>
+        <!-- Empty Bunches -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="EMPTY BUNCHES"
+            android:textColor="#aaaaaa"
+            android:textSize="13sp"
+            android:letterSpacing="0.1"
+            android:layout_marginBottom="6dp"/>
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
             android:gravity="center_vertical"
-            android:layout_marginBottom="4dp">
-            <EditText
-                android:id="@+id/etEmptyBunches"
-                android:layout_width="80dp"
-                android:layout_height="56dp"
-                android:hint="0"
+            android:layout_marginBottom="6dp">
+            <Button
+                android:id="@+id/btnEmptyPad"
+                android:layout_width="0dp"
+                android:layout_height="80dp"
+                android:layout_weight="1"
+                android:text="0"
+                android:textSize="32sp"
+                android:textStyle="bold"
                 android:textColor="#ffffff"
-                android:textColorHint="#555555"
                 android:backgroundTint="#0f3460"
-                android:inputType="number"
-                android:textSize="24sp"
-                android:gravity="center"
-                android:layout_marginEnd="12dp"/>
+                android:layout_marginEnd="10dp"/>
             <SeekBar
                 android:id="@+id/seekEmpty"
                 android:layout_width="0dp"
@@ -99,60 +128,72 @@
                 android:progressTint="#00d4ff"
                 android:thumbTint="#00d4ff"/>
         </LinearLayout>
+        <EditText
+            android:id="@+id/etEmptyBunches"
+            android:layout_width="1dp"
+            android:layout_height="1dp"
+            android:inputType="number"
+            android:visibility="invisible"/>
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Slide or type (max 200)"
+            android:text="Tap number to enter via keypad"
             android:textColor="#555555"
-            android:textSize="10sp"
-            android:layout_marginBottom="16dp"/>
+            android:textSize="12sp"
+            android:layout_marginBottom="20dp"/>
 
+        <!-- GPS -->
         <TextView
             android:id="@+id/tvGpsStatus"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="GPS: waiting..."
             android:textColor="#aaaaaa"
-            android:textSize="12sp"
+            android:textSize="14sp"
             android:fontFamily="monospace"
             android:layout_marginBottom="16dp"/>
 
+        <!-- Photo -->
         <Button
             android:id="@+id/btnTakePhoto"
             android:layout_width="match_parent"
-            android:layout_height="56dp"
-            android:text="Take Photo (Required)"
+            android:layout_height="72dp"
+            android:text="TAKE PHOTO (REQUIRED)"
             android:backgroundTint="#0f3460"
             android:textColor="#00d4ff"
             android:textSize="16sp"
+            android:textStyle="bold"
             android:layout_marginBottom="12dp"/>
 
         <ImageView
             android:id="@+id/ivPhotoPreview"
             android:layout_width="match_parent"
-            android:layout_height="200dp"
+            android:layout_height="220dp"
             android:scaleType="centerCrop"
             android:visibility="gone"
             android:layout_marginBottom="20dp"/>
 
+        <!-- Save -->
         <Button
             android:id="@+id/btnSaveEntry"
             android:layout_width="match_parent"
-            android:layout_height="60dp"
-            android:text="Save Entry"
+            android:layout_height="72dp"
+            android:text="SAVE ENTRY"
             android:backgroundTint="#00d4ff"
             android:textColor="#1a1a2e"
-            android:textSize="18sp"
+            android:textSize="20sp"
             android:textStyle="bold"
             android:layout_marginBottom="12dp"/>
 
         <Button
             android:id="@+id/btnCancel"
             android:layout_width="match_parent"
-            android:layout_height="48dp"
-            android:text="Cancel"
+            android:layout_height="56dp"
+            android:text="CANCEL"
             android:backgroundTint="#0f3460"
-            android:textColor="#aaaaaa"/>
+            android:textColor="#aaaaaa"
+            android:textSize="14sp"
+            android:layout_marginBottom="16dp"/>
 
     </LinearLayout>
 </ScrollView>

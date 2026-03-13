@@ -29,6 +29,8 @@ class NewEntryActivity : AppCompatActivity() {
 
     private lateinit var etBlockId: EditText
     private lateinit var etRipeBunches: EditText
+    private lateinit var btnRipePad: Button
+    private lateinit var btnEmptyPad: Button
     private lateinit var seekRipe: SeekBar
     private lateinit var etEmptyBunches: EditText
     private lateinit var seekEmpty: SeekBar
@@ -59,6 +61,8 @@ class NewEntryActivity : AppCompatActivity() {
         etBlockId      = findViewById(R.id.etBlockId)
         etRipeBunches  = findViewById(R.id.etRipeBunches)
         seekRipe       = findViewById(R.id.seekRipe)
+        btnRipePad  = findViewById(R.id.btnRipePad)
+        btnEmptyPad = findViewById(R.id.btnEmptyPad)
         etEmptyBunches = findViewById(R.id.etEmptyBunches)
         seekEmpty      = findViewById(R.id.seekEmpty)
         tvGpsStatus    = findViewById(R.id.tvGpsStatus)
@@ -69,6 +73,20 @@ class NewEntryActivity : AppCompatActivity() {
 
         seekRipe.max  = 200
         seekEmpty.max = 200
+
+        // Numpad dialog for Ripe
+        btnRipePad.setOnClickListener { showNumpad("Ripe Bunches") { v ->
+            etRipeBunches.setText(v.toString())
+            seekRipe.progress = minOf(v, seekRipe.max)
+            btnRipePad.text = v.toString()
+        }}
+
+        // Numpad dialog for Empty
+        btnEmptyPad.setOnClickListener { showNumpad("Empty Bunches") { v ->
+            etEmptyBunches.setText(v.toString())
+            seekEmpty.progress = minOf(v, seekEmpty.max)
+            btnEmptyPad.text = v.toString()
+        }}
 
         // Restore last used Block ID
         val prefs = getSharedPreferences("oilpalm", MODE_PRIVATE)
@@ -92,6 +110,7 @@ class NewEntryActivity : AppCompatActivity() {
                     syncingSeekBar = true
                     etRipeBunches.setText(v.toString())
                     etRipeBunches.setSelection(etRipeBunches.text.length)
+                    btnRipePad.text = v.toString()
                     syncingSeekBar = false
                 }
             }
@@ -104,6 +123,7 @@ class NewEntryActivity : AppCompatActivity() {
                     syncingSeekBar = true
                     val v = s.toString().toIntOrNull() ?: 0
                     seekRipe.progress = minOf(v, seekRipe.max)
+                    btnRipePad.text = s.toString().ifEmpty { "0" }
                     syncingSeekBar = false
                 }
             }
@@ -118,6 +138,7 @@ class NewEntryActivity : AppCompatActivity() {
                     syncingSeekBar = true
                     etEmptyBunches.setText(v.toString())
                     etEmptyBunches.setSelection(etEmptyBunches.text.length)
+                    btnEmptyPad.text = v.toString()
                     syncingSeekBar = false
                 }
             }
@@ -130,6 +151,7 @@ class NewEntryActivity : AppCompatActivity() {
                     syncingSeekBar = true
                     val v = s.toString().toIntOrNull() ?: 0
                     seekEmpty.progress = minOf(v, seekEmpty.max)
+                    btnEmptyPad.text = s.toString().ifEmpty { "0" }
                     syncingSeekBar = false
                 }
             }
@@ -155,7 +177,9 @@ class NewEntryActivity : AppCompatActivity() {
             etRipeBunches.setText(record.ripeBunches.toString())
             etEmptyBunches.setText(record.emptyBunches.toString())
             seekRipe.progress  = minOf(record.ripeBunches, seekRipe.max)
+            btnRipePad.text  = record.ripeBunches.toString()
             seekEmpty.progress = minOf(record.emptyBunches, seekEmpty.max)
+            btnEmptyPad.text = record.emptyBunches.toString()
             photoPath = record.photoPath
             currentLat = record.latitude
             currentLng = record.longitude
@@ -325,8 +349,83 @@ class NewEntryActivity : AppCompatActivity() {
         }
     }
 
+        private fun showNumpad(title: String, onValue: (Int) -> Unit) {
+        val display = android.widget.TextView(this).apply {
+            text = "0"
+            textSize = 48f
+            setTextColor(android.graphics.Color.WHITE)
+            gravity = android.view.Gravity.CENTER
+            setPadding(0, 24, 0, 24)
+            setBackgroundColor(android.graphics.Color.parseColor("#0a1628"))
+        }
+        val grid = android.widget.GridLayout(this).apply {
+            columnCount = 3
+            setPadding(16, 8, 16, 8)
+            setBackgroundColor(android.graphics.Color.parseColor("#0f1f3d"))
+        }
+        val keys = listOf("1","2","3","4","5","6","7","8","9","CLR","0","OK")
+        var current = ""
+        fun updateDisplay() { display.text = if (current.isEmpty()) "0" else current }
+
+        for (key in keys) {
+            val btn = android.widget.Button(this).apply {
+                text = key
+                textSize = 22f
+                setTextColor(android.graphics.Color.WHITE)
+                backgroundTintList = android.content.res.ColorStateList.valueOf(
+                    when(key) {
+                        "OK"  -> android.graphics.Color.parseColor("#00d4ff")
+                        "CLR" -> android.graphics.Color.parseColor("#8b0000")
+                        else  -> android.graphics.Color.parseColor("#0f3460")
+                    })
+                val lp = android.widget.GridLayout.LayoutParams().apply {
+                    width  = 0
+                    height = android.widget.GridLayout.LayoutParams.WRAP_CONTENT
+                    columnSpec = android.widget.GridLayout.spec(android.widget.GridLayout.UNDEFINED, 1f)
+                    setMargins(6, 6, 6, 6)
+                }
+                layoutParams = lp
+                minimumHeight = 140
+            }
+            btn.setOnClickListener {
+                when (key) {
+                    "CLR" -> { current = ""; updateDisplay() }
+                    "OK"  -> { /* handled below */ }
+                    else  -> {
+                        if (current.length < 3) { current += key; updateDisplay() }
+                    }
+                }
+            }
+            grid.addView(btn)
+        }
+
+        val container = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+        }
+        container.addView(display)
+        container.addView(grid)
+
+        val dialog = androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle(title)
+            .setView(container)
+            .setCancelable(true)
+            .create()
+
+        // Wire OK button separately so we can dismiss
+        val okBtn = grid.getChildAt(11) as android.widget.Button
+        okBtn.setOnClickListener {
+            val v = current.toIntOrNull() ?: 0
+            onValue(v)
+            dialog.dismiss()
+        }
+        dialog.show()
+    }
+
         private fun toast(msg: String) =
         Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
 }
+
+
+
 
 

@@ -38,6 +38,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var panelCalendar: LinearLayout
     private lateinit var panelSync: ScrollView
     private lateinit var tvTodaySummary: TextView
+    private lateinit var tvStatRipe: TextView
+    private lateinit var tvStatEmpty: TextView
     private lateinit var btnNewEntry: Button
     private lateinit var recordsContainer: LinearLayout
     private lateinit var calendarGrid: android.widget.GridLayout
@@ -72,6 +74,8 @@ class MainActivity : AppCompatActivity() {
         panelCalendar    = findViewById(R.id.panelCalendar)
         panelSync        = findViewById(R.id.panelSync)
         tvTodaySummary   = findViewById(R.id.tvTodaySummary)
+        tvStatRipe       = findViewById(R.id.tvStatRipe)
+        tvStatEmpty      = findViewById(R.id.tvStatEmpty)
         btnNewEntry      = findViewById(R.id.btnNewEntry)
         recordsContainer = findViewById(R.id.recordsContainer)
         calendarGrid     = findViewById(R.id.calendarGrid)
@@ -153,6 +157,8 @@ class MainActivity : AppCompatActivity() {
             val totalRipe  = records.sumOf { it.ripeBunches }
             val totalEmpty = records.sumOf { it.emptyBunches }
             tvTodaySummary.text = if (records.isEmpty()) "No entries yet"
+            tvStatRipe.text  = totalRipe.toString()
+            tvStatEmpty.text = totalEmpty.toString()
             else "${records.size} block(s)  |  Ripe: $totalRipe  |  Empty: $totalEmpty"
         }
     }
@@ -761,6 +767,7 @@ class MainActivity : AppCompatActivity() {
     private fun toast(msg: String) =
         Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
 }
+
 
 
 

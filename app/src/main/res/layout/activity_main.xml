@@ -27,7 +27,7 @@
             android:layout_height="wrap_content"
             android:text="ID: -"
             android:textColor="#aaaaaa"
-            android:textSize="12sp"
+            android:textSize="14sp"
             android:paddingEnd="8dp"/>
         <Button
             android:id="@+id/btnSettings"
@@ -52,33 +52,109 @@
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:orientation="vertical"
-            android:gravity="center"
-            android:padding="32dp"
+            android:padding="0dp"
             android:visibility="visible">
-            <TextView
-                android:layout_width="wrap_content"
+            <!-- Today Summary Card -->
+            <LinearLayout
+                android:id="@+id/cardToday"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Today's Harvest"
-                android:textColor="#ffffff"
-                android:textSize="22sp"
-                android:textStyle="bold"
-                android:layout_marginBottom="8dp"/>
-            <TextView
-                android:id="@+id/tvTodaySummary"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="No entries yet"
-                android:textColor="#aaaaaa"
-                android:textSize="15sp"
-                android:layout_marginBottom="32dp"/>
+                android:orientation="vertical"
+                android:background="#0f3460"
+                android:padding="20dp"
+                android:layout_margin="16dp">
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="TODAY"
+                    android:textColor="#00d4ff"
+                    android:textSize="13sp"
+                    android:letterSpacing="0.15"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="8dp"/>
+                <TextView
+                    android:id="@+id/tvTodaySummary"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="No entries yet"
+                    android:textColor="#ffffff"
+                    android:textSize="16sp"
+                    android:lineSpacingExtra="4dp"/>
+            </LinearLayout>
+
+            <!-- Big New Entry Button -->
             <Button
                 android:id="@+id/btnNewEntry"
-                android:layout_width="220dp"
-                android:layout_height="56dp"
-                android:text="+ New Harvest Entry"
-                android:textSize="16sp"
+                android:layout_width="match_parent"
+                android:layout_height="160dp"
+                android:layout_margin="16dp"
+                android:text="+ NEW ENTRY"
+                android:textSize="28sp"
+                android:textStyle="bold"
+                android:textColor="#1a1a2e"
                 android:backgroundTint="#00d4ff"
-                android:textColor="#1a1a2e"/>
+                android:letterSpacing="0.05"/>
+
+            <!-- Quick stats row -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:paddingStart="16dp"
+                android:paddingEnd="16dp"
+                android:layout_marginBottom="16dp">
+                <LinearLayout
+                    android:id="@+id/statCardRipe"
+                    android:layout_width="0dp"
+                    android:layout_height="80dp"
+                    android:layout_weight="1"
+                    android:orientation="vertical"
+                    android:gravity="center"
+                    android:background="#0a2040"
+                    android:layout_marginEnd="8dp">
+                    <TextView
+                        android:id="@+id/tvStatRipe"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="0"
+                        android:textColor="#00d4ff"
+                        android:textSize="28sp"
+                        android:textStyle="bold"/>
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="RIPE"
+                        android:textColor="#aaaaaa"
+                        android:textSize="13sp"
+                        android:letterSpacing="0.1"/>
+                </LinearLayout>
+                <LinearLayout
+                    android:id="@+id/statCardEmpty"
+                    android:layout_width="0dp"
+                    android:layout_height="80dp"
+                    android:layout_weight="1"
+                    android:orientation="vertical"
+                    android:gravity="center"
+                    android:background="#0a2040"
+                    android:layout_marginStart="8dp">
+                    <TextView
+                        android:id="@+id/tvStatEmpty"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="0"
+                        android:textColor="#ffffff"
+                        android:textSize="28sp"
+                        android:textStyle="bold"/>
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="EMPTY"
+                        android:textColor="#aaaaaa"
+                        android:textSize="13sp"
+                        android:letterSpacing="0.1"/>
+                </LinearLayout>
+            </LinearLayout>
+
         </LinearLayout>
 
         <ScrollView
@@ -145,12 +221,12 @@
                     android:layout_marginBottom="16dp"/>
 
                 <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-                    android:text="BLUETOOTH DEVICE" android:textColor="#aaaaaa" android:textSize="11sp"
+                    android:text="BLUETOOTH DEVICE" android:textColor="#aaaaaa" android:textSize="13sp"
                     android:layout_marginBottom="4dp"/>
                 <Spinner
                     android:id="@+id/spinnerDevices"
                     android:layout_width="match_parent"
-                    android:layout_height="48dp"
+                    android:layout_height="64dp"
                     android:layout_marginBottom="8dp"
                     android:popupBackground="#0f3460"
                     android:background="#0f3460"
@@ -159,7 +235,7 @@
                 <Button
                     android:id="@+id/btnConnect"
                     android:layout_width="match_parent"
-                    android:layout_height="48dp"
+                    android:layout_height="64dp"
                     android:text="Connect to RNode"
                     android:backgroundTint="#0f3460"
                     android:textColor="#00d4ff"
@@ -179,12 +255,12 @@
                     android:layout_height="wrap_content"
                     android:text="Not connected"
                     android:textColor="#aaaaaa"
-                    android:textSize="11sp"
+                    android:textSize="13sp"
                     android:fontFamily="monospace"
                     android:layout_marginBottom="24dp"/>
 
                 <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-                    android:text="BASE STATION ADDRESS" android:textColor="#aaaaaa" android:textSize="11sp"
+                    android:text="BASE STATION ADDRESS" android:textColor="#aaaaaa" android:textSize="13sp"
                     android:layout_marginBottom="4dp"/>
                 <TextView
                     android:id="@+id/tvBaseStationAddr"
@@ -192,12 +268,12 @@
                     android:layout_height="wrap_content"
                     android:text="Not set - go to Settings"
                     android:textColor="#555555"
-                    android:textSize="12sp"
+                    android:textSize="14sp"
                     android:fontFamily="monospace"
                     android:layout_marginBottom="24dp"/>
 
                 <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-                    android:text="PENDING SYNC" android:textColor="#aaaaaa" android:textSize="11sp"
+                    android:text="PENDING SYNC" android:textColor="#aaaaaa" android:textSize="13sp"
                     android:layout_marginBottom="4dp"/>
                 <TextView
                     android:id="@+id/tvUnsyncedCount"
@@ -236,7 +312,7 @@
                     android:layout_height="wrap_content"
                     android:text=""
                     android:textColor="#aaaaaa"
-                    android:textSize="11sp"
+                    android:textSize="13sp"
                     android:fontFamily="monospace"
                     android:layout_marginBottom="8dp"/>
 
@@ -252,23 +328,26 @@
         android:orientation="horizontal">
         <Button android:id="@+id/btnNavLog"
             android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"
-            android:text="Log" android:textSize="11sp" android:textColor="#1a1a2e"
+            android:text="Log" android:textSize="13sp" android:textColor="#1a1a2e"
             android:backgroundTint="#00d4ff"/>
         <Button android:id="@+id/btnNavRecords"
             android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"
-            android:text="Records" android:textSize="11sp" android:textColor="#ffffff"
+            android:text="Records" android:textSize="13sp" android:textColor="#ffffff"
             android:backgroundTint="#0f3460"/>
         <Button android:id="@+id/btnNavCalendar"
             android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"
-            android:text="Calendar" android:textSize="11sp" android:textColor="#ffffff"
+            android:text="Calendar" android:textSize="13sp" android:textColor="#ffffff"
             android:backgroundTint="#0f3460"/>
         <Button android:id="@+id/btnNavSync"
             android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"
-            android:text="Sync" android:textSize="11sp" android:textColor="#ffffff"
+            android:text="Sync" android:textSize="13sp" android:textColor="#ffffff"
             android:backgroundTint="#0f3460"/>
     </LinearLayout>
 
 </LinearLayout>
+
+
+
 
 
 
