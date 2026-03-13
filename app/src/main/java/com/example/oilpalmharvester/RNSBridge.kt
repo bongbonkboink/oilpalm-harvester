@@ -11,24 +11,21 @@ object RNSBridge {
         return worker.callAttr("start", pyBt).toString()
     }
 
-    fun sendCsv(destHashHex: String, csvText: String, filename: String): String {
-        return worker.callAttr("send_csv", destHashHex, csvText, filename).toString()
-    }
-
-    fun sendPhoto(destHashHex: String, photoPath: String, recordId: Long): String {
-        return worker.callAttr("send_photo", destHashHex, photoPath, recordId).toString()
-    }
-
-    fun sendMessage(destHashHex: String, text: String): String {
-        return worker.callAttr("send_message", destHashHex, text).toString()
-    }
-
     fun announce(): String =
         try { worker.callAttr("announce").toString() }
         catch (e: Exception) { "Error: ${e.message}" }
 
-    fun getAddress(): String: String =
-        worker.callAttr("get_address").toString()
+    fun sendCsv(destHashHex: String, csvText: String, filename: String): String =
+        try { worker.callAttr("send_csv", destHashHex, csvText, filename).toString() }
+        catch (e: Exception) { "Error: ${e.message}" }
+
+    fun sendMessage(destHashHex: String, text: String): String =
+        try { worker.callAttr("send_message", destHashHex, text).toString() }
+        catch (e: Exception) { "Error: ${e.message}" }
+
+    fun getAddress(): String =
+        try { worker.callAttr("get_address").toString() }
+        catch (e: Exception) { "" }
 
     fun getMessages(): List<Map<String, String>> {
         val raw = worker.callAttr("get_messages")
@@ -45,11 +42,10 @@ object RNSBridge {
     }
 
     fun setContact(hashHex: String, name: String): String =
-        try { worker.callAttr("set_contact", hashHex, name).toString() }
+        try { worker.callAttr("save_contact", hashHex, name).toString() }
         catch (e: Exception) { "Error: ${e.message}" }
 
     fun getContact(hashHex: String): String =
-        try { worker.callAttr("get_contact", hashHex).toString() }
+        try { worker.callAttr("resolve_name", hashHex, "").toString() }
         catch (e: Exception) { "" }
 }
-
