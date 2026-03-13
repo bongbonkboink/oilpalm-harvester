@@ -115,6 +115,13 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:columnCount="7"/>
+            <LinearLayout
+                android:id="@+id/analyticsContainer"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:paddingTop="8dp"
+                android:paddingBottom="24dp"/>
         </LinearLayout>
 
         <ScrollView
@@ -144,7 +151,9 @@
                     android:id="@+id/spinnerDevices"
                     android:layout_width="match_parent"
                     android:layout_height="48dp"
-                    android:layout_marginBottom="8dp"/>
+                    android:layout_marginBottom="8dp"android:popupBackground="#0f3460"
+                    android:entries="@null"
+                    />
                 <Button
                     android:id="@+id/btnConnect"
                     android:layout_width="match_parent"
@@ -258,6 +267,10 @@
     </LinearLayout>
 
 </LinearLayout>
+
+
+
+
 
 
 
