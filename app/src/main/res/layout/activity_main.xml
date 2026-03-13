@@ -199,6 +199,16 @@
                     android:textStyle="bold"
                     android:enabled="false"
                     android:layout_marginBottom="16dp"/>
+                <Button
+                    android:id="@+id/btnSendPhotos"
+                    android:layout_width="match_parent"
+                    android:layout_height="56dp"
+                    android:text="Send Photos via Bluetooth"
+                    android:backgroundTint="#0f3460"
+                    android:textColor="#00d4ff"
+                    android:textSize="15sp"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="16dp"/>
 
                 <TextView
                     android:id="@+id/tvSyncLog"
@@ -239,6 +249,7 @@
     </LinearLayout>
 
 </LinearLayout>
+
 
 
 
