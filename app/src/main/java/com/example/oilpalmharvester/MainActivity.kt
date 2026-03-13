@@ -529,7 +529,7 @@ class MainActivity : AppCompatActivity() {
                 if (id.isNotEmpty()) {
                     getSharedPreferences("oilpalm", MODE_PRIVATE)
                         .edit().putString("harvester_id", id).apply()
-                    tvHarvesterId.text = "ID: $hid"
+                    tvHarvesterId.text = "ID: $id"
                     toast("Harvester ID saved!")
                 }
             }.show()
@@ -600,6 +600,7 @@ class MainActivity : AppCompatActivity() {
     private fun toast(msg: String) =
         Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
 }
+
 
 
 
