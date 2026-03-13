@@ -8,6 +8,12 @@ interface HarvestDao {
     @Insert
     suspend fun insert(record: HarvestRecord): Long
 
+    @Update
+    suspend fun update(record: HarvestRecord)
+
+    @Query("SELECT * FROM harvest_records WHERE id = :id")
+    suspend fun getById(id: Long): HarvestRecord?
+
     @Query("SELECT * FROM harvest_records ORDER BY timestamp DESC")
     suspend fun getAll(): List<HarvestRecord>
 

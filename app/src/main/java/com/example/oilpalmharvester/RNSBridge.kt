@@ -23,7 +23,11 @@ object RNSBridge {
         return worker.callAttr("send_message", destHashHex, text).toString()
     }
 
-    fun getAddress(): String =
+    fun announce(): String =
+        try { worker.callAttr("announce").toString() }
+        catch (e: Exception) { "Error: ${e.message}" }
+
+    fun getAddress(): String: String =
         worker.callAttr("get_address").toString()
 
     fun getMessages(): List<Map<String, String>> {
@@ -48,3 +52,4 @@ object RNSBridge {
         try { worker.callAttr("get_contact", hashHex).toString() }
         catch (e: Exception) { "" }
 }
+

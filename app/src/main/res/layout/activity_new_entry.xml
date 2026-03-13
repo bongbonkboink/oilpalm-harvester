@@ -26,40 +26,85 @@
             android:id="@+id/etBlockId"
             android:layout_width="match_parent"
             android:layout_height="56dp"
-            android:hint="e.g. BLK-042"
+            android:hint="e.g. 98A"
             android:textColor="#ffffff"
             android:textColorHint="#555555"
             android:backgroundTint="#0f3460"
             android:inputType="text"
-            android:textSize="18sp"
-            android:layout_marginBottom="16dp"/>
+            android:textSize="22sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="20dp"/>
 
         <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
             android:text="Ripe Bunches" android:textColor="#aaaaaa" android:textSize="12sp"/>
-        <EditText
-            android:id="@+id/etRipeBunches"
+        <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="56dp"
-            android:hint="0"
-            android:textColor="#ffffff"
-            android:textColorHint="#555555"
-            android:backgroundTint="#0f3460"
-            android:inputType="number"
-            android:textSize="24sp"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="4dp">
+            <EditText
+                android:id="@+id/etRipeBunches"
+                android:layout_width="80dp"
+                android:layout_height="56dp"
+                android:hint="0"
+                android:textColor="#ffffff"
+                android:textColorHint="#555555"
+                android:backgroundTint="#0f3460"
+                android:inputType="number"
+                android:textSize="24sp"
+                android:gravity="center"
+                android:layout_marginEnd="12dp"/>
+            <SeekBar
+                android:id="@+id/seekRipe"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:progressTint="#00d4ff"
+                android:thumbTint="#00d4ff"/>
+        </LinearLayout>
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Slide or type (max 200)"
+            android:textColor="#555555"
+            android:textSize="10sp"
             android:layout_marginBottom="16dp"/>
 
         <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
             android:text="Empty Bunches" android:textColor="#aaaaaa" android:textSize="12sp"/>
-        <EditText
-            android:id="@+id/etEmptyBunches"
+        <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="56dp"
-            android:hint="0"
-            android:textColor="#ffffff"
-            android:textColorHint="#555555"
-            android:backgroundTint="#0f3460"
-            android:inputType="number"
-            android:textSize="24sp"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="4dp">
+            <EditText
+                android:id="@+id/etEmptyBunches"
+                android:layout_width="80dp"
+                android:layout_height="56dp"
+                android:hint="0"
+                android:textColor="#ffffff"
+                android:textColorHint="#555555"
+                android:backgroundTint="#0f3460"
+                android:inputType="number"
+                android:textSize="24sp"
+                android:gravity="center"
+                android:layout_marginEnd="12dp"/>
+            <SeekBar
+                android:id="@+id/seekEmpty"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:progressTint="#00d4ff"
+                android:thumbTint="#00d4ff"/>
+        </LinearLayout>
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Slide or type (max 200)"
+            android:textColor="#555555"
+            android:textSize="10sp"
             android:layout_marginBottom="16dp"/>
 
         <TextView

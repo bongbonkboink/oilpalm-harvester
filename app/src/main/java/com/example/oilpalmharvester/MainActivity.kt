@@ -49,6 +49,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tvUnsyncedCount: TextView
     private lateinit var btnSyncNow: Button
     private lateinit var btnSendPhotos: Button
+    private lateinit var btnAnnounce: Button
     private lateinit var tvSyncLog: TextView
 
     private val btService = BluetoothService()
@@ -82,6 +83,7 @@ class MainActivity : AppCompatActivity() {
         tvBaseStationAddr = findViewById(R.id.tvBaseStationAddr)
         tvUnsyncedCount  = findViewById(R.id.tvUnsyncedCount)
         btnSyncNow       = findViewById(R.id.btnSyncNow)
+        btnAnnounce      = findViewById(R.id.btnAnnounce)
         btnSendPhotos    = findViewById(R.id.btnSendPhotos)
         tvSyncLog        = findViewById(R.id.tvSyncLog)
 
@@ -109,6 +111,14 @@ class MainActivity : AppCompatActivity() {
 
         btnSyncNow.setOnClickListener    { startCsvSync() }
         btnSendPhotos.setOnClickListener { sendPendingPhotos() }
+        btnAnnounce.setOnClickListener {
+            if (!rnsConnected) { toast("Connect to RNode first"); return@setOnClickListener }
+            scope.launch {
+                val result = withContext(Dispatchers.IO) { RNSBridge.announce() }
+                toast(result)
+                appendSyncLog("Announce: $result")
+            }
+        }
 
         if (hid.isEmpty()) promptForHarvesterId()
         requestBtPermissions()
@@ -335,16 +345,48 @@ class MainActivity : AppCompatActivity() {
             }
             val sdf = SimpleDateFormat("dd MMM yyyy  HH:mm", Locale.getDefault())
             for (record in records) {
+                // Swipe container — FrameLayout with action buttons behind card
+                val frame = android.widget.FrameLayout(this@MainActivity).apply {
+                    layoutParams = LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT).also {
+                        it.setMargins(0, 0, 0, 8) }
+                }
+
+                // Action buttons (shown on swipe left)
+                val actions = LinearLayout(this@MainActivity).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    layoutParams = android.widget.FrameLayout.LayoutParams(
+                        android.widget.FrameLayout.LayoutParams.WRAP_CONTENT,
+                        android.widget.FrameLayout.LayoutParams.MATCH_PARENT).also {
+                        it.gravity = android.view.Gravity.END }
+                }
+                val btnEdit = Button(this@MainActivity).apply {
+                    text = "Edit"
+                    setTextColor(Color.WHITE)
+                    backgroundTintList = ColorStateList.valueOf(Color.parseColor("#0f6460"))
+                    layoutParams = LinearLayout.LayoutParams(160, LinearLayout.LayoutParams.MATCH_PARENT)
+                }
+                val btnDel = Button(this@MainActivity).apply {
+                    text = "Delete"
+                    setTextColor(Color.WHITE)
+                    backgroundTintList = ColorStateList.valueOf(Color.parseColor("#8b0000"))
+                    layoutParams = LinearLayout.LayoutParams(160, LinearLayout.LayoutParams.MATCH_PARENT)
+                }
+                actions.addView(btnEdit)
+                actions.addView(btnDel)
+                frame.addView(actions)
+
+                // Record card (sits on top)
                 val card = LinearLayout(this@MainActivity).apply {
                     orientation = LinearLayout.HORIZONTAL
                     setPadding(12, 12, 12, 12)
                     setBackgroundColor(Color.parseColor("#0f3460"))
-                    val lp = LinearLayout.LayoutParams(
-                        LinearLayout.LayoutParams.MATCH_PARENT,
-                        LinearLayout.LayoutParams.WRAP_CONTENT)
-                    lp.setMargins(0, 0, 0, 8)
-                    layoutParams = lp
+                    layoutParams = android.widget.FrameLayout.LayoutParams(
+                        android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
+                        android.widget.FrameLayout.LayoutParams.WRAP_CONTENT)
                 }
+
                 val thumb = ImageView(this@MainActivity).apply {
                     val lp = LinearLayout.LayoutParams(120, 120)
                     lp.setMargins(0, 0, 12, 0)
@@ -354,10 +396,11 @@ class MainActivity : AppCompatActivity() {
                     catch (e: Exception) { setBackgroundColor(Color.DKGRAY) }
                 }
                 card.addView(thumb)
+
                 val info = LinearLayout(this@MainActivity).apply {
                     orientation = LinearLayout.VERTICAL
-                    layoutParams = LinearLayout.LayoutParams(
-                        0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+                    layoutParams = LinearLayout.LayoutParams(0,
+                        LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
                 }
                 info.addView(TextView(this@MainActivity).apply {
                     text = "Block: ${record.blockId}"
@@ -384,7 +427,44 @@ class MainActivity : AppCompatActivity() {
                     textSize = 10f
                 })
                 card.addView(info)
-                card.setOnLongClickListener {
+                frame.addView(card)
+
+                // Swipe gesture on card
+                var startX = 0f
+                var swipedOpen = false
+                card.setOnTouchListener { v, event ->
+                    when (event.action) {
+                        android.view.MotionEvent.ACTION_DOWN -> {
+                            startX = event.x; false
+                        }
+                        android.view.MotionEvent.ACTION_UP -> {
+                            val dx = startX - event.x
+                            if (dx > 80) {
+                                // Swipe left — reveal buttons
+                                card.animate().translationX(-320f).setDuration(200).start()
+                                swipedOpen = true
+                            } else if (dx < -40 && swipedOpen) {
+                                // Swipe right — close
+                                card.animate().translationX(0f).setDuration(200).start()
+                                swipedOpen = false
+                            } else if (kotlin.math.abs(dx) < 10) {
+                                v.performClick()
+                            }
+                            true
+                        }
+                        else -> false
+                    }
+                }
+
+                btnEdit.setOnClickListener {
+                    card.animate().translationX(0f).setDuration(150).start()
+                    val intent = android.content.Intent(this@MainActivity, NewEntryActivity::class.java)
+                    intent.putExtra("edit_record_id", record.id)
+                    startActivityForResult(intent, 200)
+                }
+
+                btnDel.setOnClickListener {
+                    card.animate().translationX(0f).setDuration(150).start()
                     androidx.appcompat.app.AlertDialog.Builder(this@MainActivity)
                         .setTitle("Delete Record")
                         .setMessage("Delete block ${record.blockId} entry?")
@@ -392,15 +472,17 @@ class MainActivity : AppCompatActivity() {
                             lifecycleScope.launch {
                                 HarvestDatabase.getInstance(this@MainActivity)
                                     .harvestDao().deleteById(record.id)
-                                try { File(record.photoPath).delete() } catch (_: Exception) {}
+                                try { java.io.File(record.photoPath).delete() } catch (_: Exception) {}
                                 loadRecords()
                                 refreshTodaySummary()
                             }
                         }
-                        .setNegativeButton("Cancel", null).show()
-                    true
+                        .setNegativeButton("Cancel") { _, _ ->
+                            card.animate().translationX(0f).setDuration(150).start()
+                        }.show()
                 }
-                recordsContainer.addView(card)
+
+                recordsContainer.addView(frame)
             }
         }
     }
@@ -600,6 +682,8 @@ class MainActivity : AppCompatActivity() {
     private fun toast(msg: String) =
         Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
 }
+
+
 
 
 

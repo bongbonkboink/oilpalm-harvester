@@ -153,6 +153,15 @@
                     android:backgroundTint="#0f3460"
                     android:textColor="#00d4ff"
                     android:layout_marginBottom="8dp"/>
+                <Button
+                    android:id="@+id/btnAnnounce"
+                    android:layout_width="match_parent"
+                    android:layout_height="44dp"
+                    android:text="Broadcast My Address"
+                    android:backgroundTint="#1a3a1a"
+                    android:textColor="#00d4ff"
+                    android:textSize="13sp"
+                    android:layout_marginBottom="8dp"/>
                 <TextView
                     android:id="@+id/tvMyAddress"
                     android:layout_width="wrap_content"
@@ -249,6 +258,7 @@
     </LinearLayout>
 
 </LinearLayout>
+
 
 
 

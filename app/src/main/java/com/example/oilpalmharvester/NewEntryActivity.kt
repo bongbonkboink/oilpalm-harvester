@@ -10,6 +10,8 @@ import android.os.Bundle
 import android.os.Environment
 import android.os.Looper
 import android.provider.MediaStore
+import android.text.Editable
+import android.text.TextWatcher
 import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
@@ -27,7 +29,9 @@ class NewEntryActivity : AppCompatActivity() {
 
     private lateinit var etBlockId: EditText
     private lateinit var etRipeBunches: EditText
+    private lateinit var seekRipe: SeekBar
     private lateinit var etEmptyBunches: EditText
+    private lateinit var seekEmpty: SeekBar
     private lateinit var tvGpsStatus: TextView
     private lateinit var btnTakePhoto: Button
     private lateinit var ivPhotoPreview: ImageView
@@ -41,9 +45,12 @@ class NewEntryActivity : AppCompatActivity() {
     private var currentLng: Double = 0.0
     private var photoPath: String = ""
     private var photoUri: Uri? = null
+    private var editRecordId: Long = -1L
 
     private val REQ_CAMERA      = 101
     private val REQ_PERMISSIONS = 103
+
+    private var syncingSeekBar = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -51,50 +58,133 @@ class NewEntryActivity : AppCompatActivity() {
 
         etBlockId      = findViewById(R.id.etBlockId)
         etRipeBunches  = findViewById(R.id.etRipeBunches)
+        seekRipe       = findViewById(R.id.seekRipe)
         etEmptyBunches = findViewById(R.id.etEmptyBunches)
+        seekEmpty      = findViewById(R.id.seekEmpty)
         tvGpsStatus    = findViewById(R.id.tvGpsStatus)
         btnTakePhoto   = findViewById(R.id.btnTakePhoto)
         ivPhotoPreview = findViewById(R.id.ivPhotoPreview)
         btnSaveEntry   = findViewById(R.id.btnSaveEntry)
         btnCancel      = findViewById(R.id.btnCancel)
 
-        fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
+        seekRipe.max  = 200
+        seekEmpty.max = 200
 
+        // Restore last used Block ID
+        val prefs = getSharedPreferences("oilpalm", MODE_PRIVATE)
+        val lastBlock = prefs.getString("last_block_id", "") ?: ""
+        if (lastBlock.isNotEmpty()) etBlockId.setText(lastBlock)
+
+        // Check if editing existing record
+        editRecordId = intent.getLongExtra("edit_record_id", -1L)
+        if (editRecordId != -1L) {
+            btnSaveEntry.text = "Update Entry"
+            loadRecordForEdit(editRecordId)
+        }
+
+        fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
         requestAllPermissions()
+
+        // Sync slider <-> text for Ripe
+        seekRipe.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(sb: SeekBar, v: Int, fromUser: Boolean) {
+                if (fromUser && !syncingSeekBar) {
+                    syncingSeekBar = true
+                    etRipeBunches.setText(v.toString())
+                    etRipeBunches.setSelection(etRipeBunches.text.length)
+                    syncingSeekBar = false
+                }
+            }
+            override fun onStartTrackingTouch(sb: SeekBar) {}
+            override fun onStopTrackingTouch(sb: SeekBar) {}
+        })
+        etRipeBunches.addTextChangedListener(object : TextWatcher {
+            override fun afterTextChanged(s: Editable) {
+                if (!syncingSeekBar) {
+                    syncingSeekBar = true
+                    val v = s.toString().toIntOrNull() ?: 0
+                    seekRipe.progress = minOf(v, seekRipe.max)
+                    syncingSeekBar = false
+                }
+            }
+            override fun beforeTextChanged(s: CharSequence, st: Int, c: Int, a: Int) {}
+            override fun onTextChanged(s: CharSequence, st: Int, b: Int, c: Int) {}
+        })
+
+        // Sync slider <-> text for Empty
+        seekEmpty.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(sb: SeekBar, v: Int, fromUser: Boolean) {
+                if (fromUser && !syncingSeekBar) {
+                    syncingSeekBar = true
+                    etEmptyBunches.setText(v.toString())
+                    etEmptyBunches.setSelection(etEmptyBunches.text.length)
+                    syncingSeekBar = false
+                }
+            }
+            override fun onStartTrackingTouch(sb: SeekBar) {}
+            override fun onStopTrackingTouch(sb: SeekBar) {}
+        })
+        etEmptyBunches.addTextChangedListener(object : TextWatcher {
+            override fun afterTextChanged(s: Editable) {
+                if (!syncingSeekBar) {
+                    syncingSeekBar = true
+                    val v = s.toString().toIntOrNull() ?: 0
+                    seekEmpty.progress = minOf(v, seekEmpty.max)
+                    syncingSeekBar = false
+                }
+            }
+            override fun beforeTextChanged(s: CharSequence, st: Int, c: Int, a: Int) {}
+            override fun onTextChanged(s: CharSequence, st: Int, b: Int, c: Int) {}
+        })
 
         btnTakePhoto.setOnClickListener {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
-                == PackageManager.PERMISSION_GRANTED) {
-                launchCamera()
-            } else {
-                ActivityCompat.requestPermissions(this,
-                    arrayOf(Manifest.permission.CAMERA), REQ_CAMERA)
-            }
+                == PackageManager.PERMISSION_GRANTED) launchCamera()
+            else ActivityCompat.requestPermissions(
+                this, arrayOf(Manifest.permission.CAMERA), REQ_CAMERA)
         }
         btnSaveEntry.setOnClickListener { saveEntry() }
         btnCancel.setOnClickListener { finish() }
     }
 
+    private fun loadRecordForEdit(id: Long) {
+        lifecycleScope.launch {
+            val record = HarvestDatabase.getInstance(this@NewEntryActivity)
+                .harvestDao().getById(id) ?: return@launch
+            etBlockId.setText(record.blockId)
+            etRipeBunches.setText(record.ripeBunches.toString())
+            etEmptyBunches.setText(record.emptyBunches.toString())
+            seekRipe.progress  = minOf(record.ripeBunches, seekRipe.max)
+            seekEmpty.progress = minOf(record.emptyBunches, seekEmpty.max)
+            photoPath = record.photoPath
+            currentLat = record.latitude
+            currentLng = record.longitude
+            if (photoPath.isNotEmpty()) {
+                try {
+                    ivPhotoPreview.setImageBitmap(loadRotatedBitmap(photoPath))
+                    ivPhotoPreview.visibility = android.view.View.VISIBLE
+                    btnTakePhoto.text = "Retake Photo"
+                } catch (_: Exception) {}
+            }
+            tvGpsStatus.text = "GPS: %.6f, %.6f".format(record.latitude, record.longitude)
+            tvGpsStatus.setTextColor(android.graphics.Color.parseColor("#00d4ff"))
+        }
+    }
+
     private fun requestAllPermissions() {
         val needed = mutableListOf<String>()
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
-            != PackageManager.PERMISSION_GRANTED)
-            needed += Manifest.permission.CAMERA
+            != PackageManager.PERMISSION_GRANTED) needed += Manifest.permission.CAMERA
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
-            != PackageManager.PERMISSION_GRANTED)
-            needed += Manifest.permission.ACCESS_FINE_LOCATION
-        if (needed.isNotEmpty()) {
+            != PackageManager.PERMISSION_GRANTED) needed += Manifest.permission.ACCESS_FINE_LOCATION
+        if (needed.isNotEmpty())
             ActivityCompat.requestPermissions(this, needed.toTypedArray(), REQ_PERMISSIONS)
-        } else {
-            fetchLocation()
-        }
+        else fetchLocation()
     }
 
     private fun fetchLocation() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
             != PackageManager.PERMISSION_GRANTED) return
-
-        // Try last known location first
         fusedLocationClient.lastLocation.addOnSuccessListener { loc ->
             if (loc != null) {
                 currentLat = loc.latitude
@@ -103,14 +193,8 @@ class NewEntryActivity : AppCompatActivity() {
                 tvGpsStatus.setTextColor(android.graphics.Color.parseColor("#00d4ff"))
             }
         }
-
-        // Request a fresh fix
-        val request = LocationRequest.Builder(
-            Priority.PRIORITY_HIGH_ACCURACY, 5000L)
-            .setMinUpdateIntervalMillis(2000L)
-            .setMaxUpdates(3)
-            .build()
-
+        val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 5000L)
+            .setMinUpdateIntervalMillis(2000L).setMaxUpdates(3).build()
         locationCallback = object : LocationCallback() {
             override fun onLocationResult(result: LocationResult) {
                 val loc = result.lastLocation ?: return
@@ -120,17 +204,15 @@ class NewEntryActivity : AppCompatActivity() {
                 tvGpsStatus.setTextColor(android.graphics.Color.parseColor("#00d4ff"))
             }
         }
-
-        fusedLocationClient.requestLocationUpdates(
-            request, locationCallback!!, Looper.getMainLooper())
+        fusedLocationClient.requestLocationUpdates(request, locationCallback!!, Looper.getMainLooper())
     }
 
     private fun launchCamera() {
-        val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+        val timeStamp  = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
         val storageDir = getExternalFilesDir(Environment.DIRECTORY_PICTURES)
-        val photoFile = File.createTempFile("HARVEST_${timeStamp}_", ".jpg", storageDir)
+        val photoFile  = File.createTempFile("HARVEST_${timeStamp}_", ".jpg", storageDir)
         photoPath = photoFile.absolutePath
-        photoUri = FileProvider.getUriForFile(
+        photoUri  = FileProvider.getUriForFile(
             this, "com.example.oilpalmharvester.fileprovider", photoFile)
         val intent = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
         intent.putExtra(MediaStore.EXTRA_OUTPUT, photoUri)
@@ -140,8 +222,7 @@ class NewEntryActivity : AppCompatActivity() {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == REQ_CAMERA && resultCode == RESULT_OK) {
-            val bitmap = loadRotatedBitmap(photoPath)
-            ivPhotoPreview.setImageBitmap(bitmap)
+            ivPhotoPreview.setImageBitmap(loadRotatedBitmap(photoPath))
             ivPhotoPreview.visibility = android.view.View.VISIBLE
             btnTakePhoto.text = "Retake Photo"
         }
@@ -152,22 +233,18 @@ class NewEntryActivity : AppCompatActivity() {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         when (requestCode) {
             REQ_PERMISSIONS -> fetchLocation()
-            REQ_CAMERA -> {
-                if (grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED)
-                    launchCamera()
-                else
-                    toast("Camera permission is required")
-            }
+            REQ_CAMERA -> if (grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED)
+                launchCamera() else toast("Camera permission required")
         }
     }
 
     private fun loadRotatedBitmap(path: String): android.graphics.Bitmap {
         val bitmap = BitmapFactory.decodeFile(path)
-        val exif = ExifInterface(path)
-        val orientation = exif.getAttributeInt(
+        val exif   = ExifInterface(path)
+        val orient = exif.getAttributeInt(
             ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)
         val matrix = Matrix()
-        when (orientation) {
+        when (orient) {
             ExifInterface.ORIENTATION_ROTATE_90  -> matrix.postRotate(90f)
             ExifInterface.ORIENTATION_ROTATE_180 -> matrix.postRotate(180f)
             ExifInterface.ORIENTATION_ROTATE_270 -> matrix.postRotate(270f)
@@ -186,24 +263,41 @@ class NewEntryActivity : AppCompatActivity() {
         if (emptyStr.isEmpty())  { toast("Enter empty bunches count"); return }
         if (photoPath.isEmpty()) { toast("Photo is required"); return }
 
-        val prefs = getSharedPreferences("oilpalm", MODE_PRIVATE)
+        // Persist last block ID
+        getSharedPreferences("oilpalm", MODE_PRIVATE)
+            .edit().putString("last_block_id", blockId).apply()
+
+        val prefs       = getSharedPreferences("oilpalm", MODE_PRIVATE)
         val harvesterId = prefs.getString("harvester_id", "UNKNOWN") ?: "UNKNOWN"
 
-        val record = HarvestRecord(
-            harvesterId  = harvesterId,
-            blockId      = blockId,
-            ripeBunches  = ripeStr.toIntOrNull() ?: 0,
-            emptyBunches = emptyStr.toIntOrNull() ?: 0,
-            latitude     = currentLat,
-            longitude    = currentLng,
-            photoPath    = photoPath,
-            timestamp    = System.currentTimeMillis()
-        )
-
         lifecycleScope.launch {
-            HarvestDatabase.getInstance(this@NewEntryActivity)
-                .harvestDao().insert(record)
-            toast("Entry saved!")
+            val dao = HarvestDatabase.getInstance(this@NewEntryActivity).harvestDao()
+            if (editRecordId != -1L) {
+                val existing = dao.getById(editRecordId) ?: return@launch
+                dao.update(existing.copy(
+                    blockId      = blockId,
+                    ripeBunches  = ripeStr.toIntOrNull() ?: 0,
+                    emptyBunches = emptyStr.toIntOrNull() ?: 0,
+                    latitude     = currentLat,
+                    longitude    = currentLng,
+                    photoPath    = photoPath,
+                    synced       = false,
+                    photoSynced  = false
+                ))
+                toast("Entry updated!")
+            } else {
+                dao.insert(HarvestRecord(
+                    harvesterId  = harvesterId,
+                    blockId      = blockId,
+                    ripeBunches  = ripeStr.toIntOrNull() ?: 0,
+                    emptyBunches = emptyStr.toIntOrNull() ?: 0,
+                    latitude     = currentLat,
+                    longitude    = currentLng,
+                    photoPath    = photoPath,
+                    timestamp    = System.currentTimeMillis()
+                ))
+                toast("Entry saved!")
+            }
             setResult(RESULT_OK)
             finish()
         }
