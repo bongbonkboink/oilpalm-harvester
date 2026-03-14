@@ -536,7 +536,7 @@ class MainActivity : AppCompatActivity() {
                     cell.addView(TextView(this@MainActivity).apply {
                         text = "${(data!!.ripe + data.empty)}"
                         setTextColor(Color.parseColor("#00ff88"))
-                        textSize = 9f
+                        textSize = 4f
                         gravity = android.view.Gravity.CENTER
                     })
                 }
@@ -767,6 +767,7 @@ class MainActivity : AppCompatActivity() {
     private fun toast(msg: String) =
         Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
 }
+
 
 
 
