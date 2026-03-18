@@ -538,7 +538,7 @@ def send_message(dest_hash_hex, text):
         return "Not connected"
     try:
         # Normalise — always plain hex, no brackets
-        dest_hash_hex = dest_hash_hex.strip().strip("<>")
+        dest_hash_hex = ''.join(c for c in dest_hash_hex.strip().strip('<>') if c in '0123456789abcdefABCDEF')
         dest_hash = bytes.fromhex(dest_hash_hex)
         RNS.log(f"Sending to {dest_hash_hex}: {text}")
 
@@ -614,7 +614,7 @@ def send_image(dest_hash_hex, jpeg_b64):
     if not lxmf_router or not destination:
         return "Not connected"
     try:
-        dest_hash_hex = dest_hash_hex.strip().strip("<>")
+        dest_hash_hex = ''.join(c for c in dest_hash_hex.strip().strip('<>') if c in '0123456789abcdefABCDEF')
         dest_hash = bytes.fromhex(dest_hash_hex)
 
         with _data_lock:
@@ -747,7 +747,7 @@ def send_csv(dest_hash_hex, csv_text, filename):
     if not lxmf_router or not destination:
         return "Not connected"
     try:
-        dest_hash_hex = dest_hash_hex.strip().strip("<>")
+        dest_hash_hex = ''.join(c for c in dest_hash_hex.strip().strip('<>') if c in '0123456789abcdefABCDEF')
         dest_hash = bytes.fromhex(dest_hash_hex)
         with _data_lock:
             recalled_identity = known_identities.get(dest_hash_hex)
@@ -801,7 +801,7 @@ def send_photo(dest_hash_hex, photo_path, record_id):
             img_fmt = "jpeg"
         kb = len(img_bytes) / 1024
         RNS.log(f'Photo {kb:.1f} KB ({img_fmt}) for record {record_id}')
-        dest_hash_hex = dest_hash_hex.strip().strip("<>")
+        dest_hash_hex = ''.join(c for c in dest_hash_hex.strip().strip('<>') if c in '0123456789abcdefABCDEF')
         dest_hash = bytes.fromhex(dest_hash_hex)
         with _data_lock:
             recalled_identity = known_identities.get(dest_hash_hex)
