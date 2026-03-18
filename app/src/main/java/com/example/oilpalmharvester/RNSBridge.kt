@@ -17,10 +17,10 @@ object RNSBridge {
 
     fun sendCsv(destHashHex: String, csvText: String, filename: String): String =
         try { worker.callAttr("send_csv", destHashHex, csvText, filename).toString() }
+        catch (e: Exception) { "Error: ${e.message}" }
 
     fun sendPhoto(destHashHex: String, photoPath: String, recordId: Long): String =
         try { worker.callAttr("send_photo", destHashHex, photoPath, recordId.toString()).toString() }
-        catch (e: Exception) { "Error: ${e.message}" }
         catch (e: Exception) { "Error: ${e.message}" }
 
     fun sendMessage(destHashHex: String, text: String): String =
@@ -63,5 +63,6 @@ object RNSBridge {
         try { worker.callAttr("resolve_name", hashHex, "").toString() }
         catch (e: Exception) { "" }
 }
+
 
 
