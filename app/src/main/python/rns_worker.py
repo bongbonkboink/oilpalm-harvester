@@ -818,7 +818,7 @@ def send_photo(dest_hash_hex, photo_path, record_id):
             time.sleep(5.0)
         import os as _os
         fname = f"harvest_{record_id}_{_os.path.basename(photo_path)}"
-        fields = {LXMF.FIELD_IMAGE: [img_fmt, img_bytes]}
+        fields = {"ia": [img_fmt, img_bytes]}
         delivered = threading.Event()
         result = {"ok": False, "state": "unknown"}
         def on_delivered(m): result["ok"] = True; result["state"] = "delivered"; delivered.set()
