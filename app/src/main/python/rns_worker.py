@@ -645,7 +645,7 @@ def send_image(dest_hash_hex, jpeg_b64):
             destination,
             f"Harvest photo for record {record_id}",
             title="",
-            desired_method=LXMF.LXMessage.OPPORTUNISTIC,
+            desired_method=LXMF.LXMessage.DIRECT,
             fields={"ia": ["webp", img_bytes]}
         )
         msg.register_delivery_callback(lambda m: RNS.log(f"Image delivered! state={m.state}"))
@@ -817,7 +817,7 @@ def send_photo(dest_hash_hex, photo_path, record_id):
             time.sleep(2.0)
         import os as _os
         fname = f"harvest_{record_id}_{_os.path.basename(photo_path)}"
-        fields = {"f": [[fname, "image/jpeg", img_bytes]]}
+        fields = {LXMF.FIELD_IMAGE: [img_fmt, img_bytes]}
         delivered = threading.Event()
         result = {"ok": False, "state": "unknown"}
         def on_delivered(m): result["ok"] = True; result["state"] = "delivered"; delivered.set()
@@ -827,7 +827,7 @@ def send_photo(dest_hash_hex, photo_path, record_id):
             destination,
             f"Harvest photo for record {record_id}",
             title=f"HARVEST_PHOTO:{record_id}",
-            desired_method=LXMF.LXMessage.OPPORTUNISTIC,
+            desired_method=LXMF.LXMessage.DIRECT,
             fields=fields)
         msg.register_delivery_callback(on_delivered)
         msg.register_failed_callback(on_failed)
