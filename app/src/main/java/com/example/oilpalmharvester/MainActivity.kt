@@ -131,7 +131,7 @@ class MainActivity : AppCompatActivity() {
         val prefs = getSharedPreferences("oilpalm", MODE_PRIVATE)
         val hid  = prefs.getString("harvester_id", "") ?: ""
         if (hid.isNotEmpty()) tvHarvesterId.text = "ID: $hid"
-        val base = prefs.getString("base_station_address", "") ?: ""
+        val base = prefs.getString("base_station_address", "") ?: "".trim().replace(Regex("[^a-fA-F0-9]"), "")
         tvBaseStationAddr.text = if (base.isEmpty()) "Not set - go to Settings" else base
         tvBaseStationAddr.setTextColor(
             if (base.isEmpty()) Color.parseColor("#555555")
@@ -176,7 +176,8 @@ class MainActivity : AppCompatActivity() {
 
     private fun startCsvSync() {
         val prefs    = getSharedPreferences("oilpalm", MODE_PRIVATE)
-        val baseAddr = prefs.getString("base_station_address", "") ?: ""
+        val baseAddr = prefs.getString("base_station_address", "") ?: "".trim().replace(Regex("[^a-fA-F0-9]"), "")
+        val baseAddr = baseAddr.trim().replace(Regex("[^a-fA-F0-9]"), "")
         if (baseAddr.isEmpty()) { toast("Set base station address in Settings first"); return }
         if (!rnsConnected)      { toast("Connect to RNode first"); return }
 
@@ -223,7 +224,8 @@ class MainActivity : AppCompatActivity() {
     // -- Photo transfer via RNS --------------------------------------------------
     private fun sendPendingPhotos() {
         val prefs    = getSharedPreferences("oilpalm", MODE_PRIVATE)
-        val baseAddr = prefs.getString("base_station_address", "") ?: ""
+        val baseAddr = prefs.getString("base_station_address", "") ?: "".trim().replace(Regex("[^a-fA-F0-9]"), "")
+        val baseAddr = baseAddr.trim().replace(Regex("[^a-fA-F0-9]"), "")
         if (baseAddr.isEmpty()) { toast("Set base station address in Settings first"); return }
         if (!rnsConnected)      { toast("Connect to RNode first"); return }
 
@@ -767,6 +769,8 @@ class MainActivity : AppCompatActivity() {
     private fun toast(msg: String) =
         Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
 }
+
+
 
 
 

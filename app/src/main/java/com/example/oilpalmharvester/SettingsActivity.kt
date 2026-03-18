@@ -30,7 +30,7 @@ class SettingsActivity : AppCompatActivity() {
 
         btnSave.setOnClickListener {
             val hid  = etHarvesterId.text.toString().trim()
-            val base = etBaseStation.text.toString().trim()
+            val base = etBaseStation.text.toString().trim().replace(Regex("[^a-fA-F0-9]"), "")
             prefs.edit()
                 .putString("harvester_id", hid)
                 .putString("base_station_address", base)
@@ -150,4 +150,5 @@ class SettingsActivity : AppCompatActivity() {
 
     private fun toast(msg: String) = Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
 }
+
 
