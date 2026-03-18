@@ -784,6 +784,8 @@ def send_photo(dest_hash_hex, photo_path, record_id):
     if not lxmf_router or not destination:
         return "Not connected"
     try:
+        img_fmt = "jpeg"
+        img_bytes = b""
         try:
             from PIL import Image as _PIL
             import io as _io
@@ -793,11 +795,12 @@ def send_photo(dest_hash_hex, photo_path, record_id):
             img.save(buf, format="JPEG", quality=40)
             img_bytes = buf.getvalue()
         except Exception as e:
-            RNS.log(f"PIL compress failed: {e}, reading raw")
+            RNS.log(f"PIL compress failed: {e}, reading raw JPEG")
             with open(photo_path, "rb") as f:
                 img_bytes = f.read()
+            img_fmt = "jpeg"
         kb = len(img_bytes) / 1024
-        RNS.log(f"Photo {kb:.1f} KB for record {record_id}")
+        RNS.log(f'Photo {kb:.1f} KB ({img_fmt}) for record {record_id}')
         dest_hash_hex = dest_hash_hex.strip().strip("<>")
         dest_hash = bytes.fromhex(dest_hash_hex)
         with _data_lock:
