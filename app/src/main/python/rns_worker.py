@@ -645,7 +645,7 @@ def send_image(dest_hash_hex, jpeg_b64):
             destination,
             f"Harvest photo for record {record_id}",
             title="",
-            desired_method=LXMF.LXMessage.DIRECT,
+            desired_method=LXMF.LXMessage.OPPORTUNISTIC,
             fields={"ia": ["webp", img_bytes]}
         )
         msg.register_delivery_callback(lambda m: RNS.log(f"Image delivered! state={m.state}"))
@@ -812,9 +812,10 @@ def send_photo(dest_hash_hex, photo_path, record_id):
         actual_hash = RNS.prettyhexrep(lxmf_dest.hash).strip("<>")
         if actual_hash != dest_hash_hex:
             return f"Hash mismatch: got {actual_hash}"
-        if not RNS.Transport.has_path(lxmf_dest.hash):
-            RNS.Transport.request_path(lxmf_dest.hash)
-            time.sleep(2.0)
+        if not RNS.Transport.has_path(dest_hash):
+            RNS.log(f'Requesting path to {dest_hash_hex}...')
+            RNS.Transport.request_path(dest_hash)
+            time.sleep(5.0)
         import os as _os
         fname = f"harvest_{record_id}_{_os.path.basename(photo_path)}"
         fields = {LXMF.FIELD_IMAGE: [img_fmt, img_bytes]}
@@ -827,7 +828,7 @@ def send_photo(dest_hash_hex, photo_path, record_id):
             destination,
             f"Harvest photo for record {record_id}",
             title=f"HARVEST_PHOTO:{record_id}",
-            desired_method=LXMF.LXMessage.DIRECT,
+            desired_method=LXMF.LXMessage.OPPORTUNISTIC,
             fields=fields)
         msg.register_delivery_callback(on_delivered)
         msg.register_failed_callback(on_failed)
