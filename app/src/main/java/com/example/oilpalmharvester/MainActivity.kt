@@ -1,4 +1,4 @@
-﻿package com.example.oilpalmharvester
+package com.example.oilpalmharvester
 
 import android.Manifest
 import android.bluetooth.BluetoothManager
@@ -176,8 +176,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun startCsvSync() {
         val prefs    = getSharedPreferences("oilpalm", MODE_PRIVATE)
-        val baseAddr = prefs.getString("base_station_address", "") ?: "".trim().replace(Regex("[^a-fA-F0-9]"), "")
-        val baseAddr = baseAddr.trim().replace(Regex("[^a-fA-F0-9]"), "")
+        val baseAddr = prefs.getString("base_station_address", "")?.trim()?.replace(Regex("[^a-fA-F0-9]"), "") ?: ""
         if (baseAddr.isEmpty()) { toast("Set base station address in Settings first"); return }
         if (!rnsConnected)      { toast("Connect to RNode first"); return }
 
@@ -224,8 +223,7 @@ class MainActivity : AppCompatActivity() {
     // -- Photo transfer via RNS --------------------------------------------------
     private fun sendPendingPhotos() {
         val prefs    = getSharedPreferences("oilpalm", MODE_PRIVATE)
-        val baseAddr = prefs.getString("base_station_address", "") ?: "".trim().replace(Regex("[^a-fA-F0-9]"), "")
-        val baseAddr = baseAddr.trim().replace(Regex("[^a-fA-F0-9]"), "")
+        val baseAddr = prefs.getString("base_station_address", "")?.trim()?.replace(Regex("[^a-fA-F0-9]"), "") ?: ""
         if (baseAddr.isEmpty()) { toast("Set base station address in Settings first"); return }
         if (!rnsConnected)      { toast("Connect to RNode first"); return }
 
@@ -343,7 +341,7 @@ class MainActivity : AppCompatActivity() {
                         it.setMargins(0, 0, 0, 8) }
                 }
 
-                // Thumbnail — tap to enlarge
+                // Thumbnail � tap to enlarge
                 val thumb = ImageView(this@MainActivity).apply {
                     val lp = LinearLayout.LayoutParams(120, 120)
                     lp.setMargins(0, 0, 12, 0)
@@ -563,7 +561,7 @@ class MainActivity : AppCompatActivity() {
                 calendarGrid.addView(cell)
             }
 
-            // ── Analytics section ─────────────────────────────────────────────
+            // -- Analytics section ---------------------------------------------
             buildAnalytics(records)
         }
     }
