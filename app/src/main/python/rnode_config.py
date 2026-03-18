@@ -15,7 +15,7 @@ import json
 import os
 import threading
 
-_CONFIG_PATH = "/data/data/com.example.rnshello/files/rnode_config.json"
+_CONFIG_PATH = "/data/data/com.example.oilpalmharvester/files/rnode_config.json"
 _lock = threading.Lock()
 
 DEFAULTS = {

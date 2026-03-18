@@ -1,4 +1,4 @@
-﻿import RNS
+import RNS
 import LXMF
 import threading
 import signal
@@ -15,49 +15,17 @@ _rns_started = False
 _start_done  = threading.Event()
 _start_result = {"addr": None, "error": None}
 
-chat_messages  = []
+# Thread-safe shared state
+_data_lock    = threading.Lock()
+chat_messages = deque(maxlen=500)   # FIX: was unbounded list, now capped
 seen_announces = []
-known_identities = {}
-contacts = {}
-
-CONTACTS_PATH = "/data/data/com.example.oilpalmharvester/files/contacts.json"
-
-def load_contacts():
-    global contacts
-    try:
-        import json
-        if os.path.exists(CONTACTS_PATH):
-            with open(CONTACTS_PATH, "r") as f:
-                contacts = json.load(f)
-    except Exception as e:
-        RNS.log(f"Could not load contacts: {e}")
-        contacts = {}
-
-def save_contacts():
-    try:
-        import json
-        with open(CONTACTS_PATH, "w") as f:
-            json.dump(contacts, f)
-    except Exception as e:
-        RNS.log(f"Could not save contacts: {e}")
-
-def set_contact(hash_hex, name):
-    hash_hex = hash_hex.strip().replace("<","").replace(">","")
-    if name.strip():
-        contacts[hash_hex] = name.strip()
-    else:
-        contacts.pop(hash_hex, None)
-    save_contacts()
-    return "OK"
-
-def get_contact(hash_hex):
-    hash_hex = hash_hex.strip().replace("<","").replace(">","")
-    return contacts.get(hash_hex, "")
+known_identities = {}  # plain hex (no <>) -> RNS.Identity
+active_links  = {}     # plain hex -> RNS.Link (most recent active link per peer)
 
 RNS_CONFIG = """
 [reticulum]
   enable_transport = True
-  share_instance = False
+  share_instance = True
   shared_instance_port = 37428
   instance_control_port = 37429
   panic_on_interface_error = False
@@ -77,6 +45,8 @@ CMD_TXPOWER     = 0x03
 CMD_SF          = 0x04
 CMD_CR          = 0x05
 CMD_RADIO_STATE = 0x06
+CMD_DETECT      = 0x08
+CMD_READY       = 0x0F
 RADIO_STATE_ON  = 0x01
 
 def kiss_escape(data):
@@ -94,19 +64,37 @@ def kiss_cmd(cmd, data=b""):
     return bytes([KISS_FEND, cmd]) + kiss_escape(data) + bytes([KISS_FEND])
 
 def configure_rnode(socket):
-    RNS.log("Configuring RNode radio parameters...")
-    socket.write(kiss_cmd(CMD_FREQUENCY, struct.pack(">I", 433025000)))
-    time.sleep(0.1)
-    socket.write(kiss_cmd(CMD_BANDWIDTH, struct.pack(">I", 31250)))
-    time.sleep(0.1)
-    socket.write(kiss_cmd(CMD_TXPOWER, bytes([17])))
-    time.sleep(0.1)
-    socket.write(kiss_cmd(CMD_SF, bytes([8])))
-    time.sleep(0.1)
-    socket.write(kiss_cmd(CMD_CR, bytes([6])))
-    time.sleep(0.1)
+    import rnode_config as _rc
+    cfg = _rc.get()
+    freq  = cfg["frequency"]
+    bw    = cfg["bandwidth"]
+    txpwr = cfg["txpower"]
+    sf    = cfg["sf"]
+    cr    = cfg["cr"]
+    RNS.log(f"Configuring RNode: freq={freq} bw={bw} tx={txpwr} sf={sf} cr={cr}")
+    # 1. Detect / wake RNode
+    socket.write(kiss_cmd(CMD_DETECT, bytes([0x00])))
+    time.sleep(0.3)
+    # 2. Radio OFF — clean slate
+    socket.write(kiss_cmd(CMD_RADIO_STATE, bytes([0x00])))
+    time.sleep(0.8)
+    # 3. Set params from saved config
+    socket.write(kiss_cmd(CMD_FREQUENCY, struct.pack(">I", freq)))
+    time.sleep(0.2)
+    socket.write(kiss_cmd(CMD_BANDWIDTH, struct.pack(">I", bw)))
+    time.sleep(0.2)
+    socket.write(kiss_cmd(CMD_TXPOWER, bytes([txpwr])))
+    time.sleep(0.2)
+    socket.write(kiss_cmd(CMD_SF, bytes([sf])))
+    time.sleep(0.2)
+    socket.write(kiss_cmd(CMD_CR, bytes([cr])))
+    time.sleep(0.2)
+    # 4. Radio ON — starts RX immediately
     socket.write(kiss_cmd(CMD_RADIO_STATE, bytes([RADIO_STATE_ON])))
-    time.sleep(0.5)
+    time.sleep(1.5)
+    # 5. Signal ready
+    socket.write(kiss_cmd(CMD_READY, bytes([0x00])))
+    time.sleep(0.2)
     RNS.log("RNode radio configured and ON")
 
 class AndroidBTInterface(Interface):
@@ -114,43 +102,44 @@ class AndroidBTInterface(Interface):
 
     def __init__(self, owner, name, socket):
         super().__init__()
-        self.owner                 = owner
-        self.name                  = name
-        self.rxb                   = 0
-        self.txb                   = 0
-        self.online                = False
-        self.IN                    = True
-        self.OUT                   = True
-        self.FWD                   = False
-        self.RPT                   = False
-        self._socket               = socket
-        self.bitrate               = self.BITRATE_GUESS
-        self.ingress_control       = False
-        self.ic_max_held_announces = 0
-        self.ic_burst_hold_time    = 0
-        self.ic_burst_freq_new     = 0
-        self.ic_burst_freq         = 0
-        self.announce_cap          = 2
-        self.announce_queue        = []
-        self.held_announces        = {}
-        self.announced_identity    = None
-        self.mode                  = Interface.MODE_FULL
-        self.oa_freq_deque         = deque(maxlen=16)
-        self.ifac_size             = None
-        self.ifac_netkey           = None
-        self.ifac_key              = None
-        self.ifac_identity         = None
+        self.owner                  = owner
+        self.name                   = name
+        self.rxb                    = 0
+        self.txb                    = 0
+        self.online                 = False
+        self.IN                     = True
+        self.OUT                    = True
+        self.FWD                    = False
+        self.RPT                    = False
+        self._socket                = socket
+        self.bitrate                = self.BITRATE_GUESS
+        self.ingress_control        = False
+        self.ic_max_held_announces  = 0
+        self.ic_burst_hold_time     = 0
+        self.ic_burst_freq_new      = 0
+        self.ic_burst_freq          = 0
+        self.announce_cap           = 2
+        self.announce_queue         = []
+        self.held_announces         = {}
+        self.announced_identity     = None
+        self.mode                   = Interface.MODE_FULL
+        self.oa_freq_deque          = deque(maxlen=16)
+        self.ifac_size              = None
+        self.ifac_netkey            = None
+        self.ifac_key               = None
+        self.ifac_identity          = None
         self.ifac_signature         = None
+        # Required by RNS Transport
         self.announce_rate_target   = None
         self.announce_rate_grace    = None
         self.announce_rate_penalty  = None
         self.announce_allowed_at    = 0.0
         self.announce_time          = None
         self.stamp_cost             = None
-        self.online                = True
-        self._kiss_buf             = []
-        self._in_frame             = False
-        self._escape               = False
+        self.online                 = True
+        self._kiss_buf              = []
+        self._in_frame              = False
+        self._escape                = False
         threading.Thread(target=self._read_loop, daemon=True).start()
 
     def _read_loop(self):
@@ -167,10 +156,16 @@ class AndroidBTInterface(Interface):
         for byte in data:
             if byte == KISS_FEND:
                 if self._in_frame and len(self._kiss_buf) > 1:
-                    if self._kiss_buf[0] == CMD_DATA:
-                        pkt = bytes(self._kiss_buf[1:])
+                    pkt = bytes(self._kiss_buf[1:])
+                    if len(pkt) > 0:
                         self.rxb += len(pkt)
-                        self.owner.inbound(pkt, self)
+                        port = self._kiss_buf[0]
+                        RNS.log(f"RX KISS port=0x{port:02x} len={len(pkt)}")
+                        if port == CMD_DATA:
+                            try:
+                                self.owner.inbound(pkt, self)
+                            except Exception as e:
+                                RNS.log(f"inbound error: {e}")
                 self._kiss_buf = []
                 self._in_frame = True
                 self._escape   = False
@@ -194,97 +189,328 @@ class AndroidBTInterface(Interface):
             RNS.log(f"BT write error: {e}")
 
 def message_received(message):
-    sender = RNS.prettyhexrep(message.source_hash)
-    text   = message.content_as_string()
-    ts     = time.strftime("%H:%M:%S")
-    entry  = {"from": sender, "text": text, "ts": ts, "direction": "in"}
-    chat_messages.append(entry)
+    import base64 as _b64
+    sender = RNS.prettyhexrep(message.source_hash).strip("<>")
+    ts = time.strftime("%H:%M:%S")
+
+    # ── Check for image field first (Sideband-compatible) ────────────────────
+    # 'ia' is the standard image field key in LXMF
+    # Format: [format_string, raw_bytes]  e.g. ["jpg", b"..."]
+    try:
+        fields = message.fields or {}
+        if "ia" in fields:
+            image_field = fields["ia"]
+            img_fmt   = image_field[0]   # e.g. "jpg", "webp", "png"
+            img_bytes = image_field[1]
+            if isinstance(img_bytes, (bytes, bytearray)) and len(img_bytes) > 0:
+                b64 = _b64.b64encode(bytes(img_bytes)).decode("ascii")
+                RNS.log(f"IMG RECEIVED from {sender}: {img_fmt} ({len(img_bytes)} bytes)")
+                with _data_lock:
+                    chat_messages.append({
+                        "from": sender,
+                        "text": f"IMG_B64:{b64}",
+                        "ts": ts,
+                        "direction": "in"
+                    })
+                return
+    except Exception as e:
+        RNS.log(f"Image field parse error: {e}")
+
+    # ── Regular text message ───────────────────────────────────────────────────
+    text = ""
+    try:
+        text = message.content_as_string()
+    except:
+        pass
+    if not text:
+        try:
+            raw = message.content
+            if isinstance(raw, bytes):
+                text = raw.decode("utf-8", errors="replace")
+            elif raw:
+                text = str(raw)
+        except:
+            pass
+    if not text:
+        try:
+            text = message.title_as_string() or ""
+        except:
+            pass
+    RNS.log(f"MSG RECEIVED from {sender}: '{text}' (fields={message.fields})")
+    with _data_lock:
+        chat_messages.append({"from": sender, "text": text or "(empty)", "ts": ts, "direction": "in"})
+
+def _msgpack_decode_first(data):
+    """
+    Pure-Python minimal msgpack decoder — no external library needed.
+    Decodes only the first value from data, returns (value, bytes_consumed).
+    Handles the types actually used in LXMF app_data:
+      fixarray, bin8, bin16, str8, fixstr, nil, bool, int types.
+
+    Sideband app_data format: fixarray[2] = [name_bytes, nil]
+      b'\\x92\\xc4\\x0eAnonymous Peer\\xc0'
+      \\x92       fixarray len 2
+      \\xc4\\x0e  bin8, 14 bytes
+      ...name...
+      \\xc0       nil
+    """
+    if not data:
+        raise ValueError("empty")
+    b = data[0]
+    # nil
+    if b == 0xc0:
+        return (None, 1)
+    # bool
+    if b == 0xc2:
+        return (False, 1)
+    if b == 0xc3:
+        return (True, 1)
+    # positive fixint
+    if b <= 0x7f:
+        return (b, 1)
+    # fixstr (0xa0-0xbf)
+    if 0xa0 <= b <= 0xbf:
+        n = b & 0x1f
+        return (data[1:1+n].decode("utf-8", errors="replace"), 1+n)
+    # fixarray (0x90-0x9f)
+    if 0x90 <= b <= 0x9f:
+        count = b & 0x0f
+        items = []
+        pos = 1
+        for _ in range(count):
+            val, consumed = _msgpack_decode_first(data[pos:])
+            items.append(val)
+            pos += consumed
+        return (items, pos)
+    # bin8 (0xc4)
+    if b == 0xc4:
+        n = data[1]
+        return (data[2:2+n], 2+n)
+    # bin16 (0xc5)
+    if b == 0xc5:
+        n = (data[1] << 8) | data[2]
+        return (data[3:3+n], 3+n)
+    # str8 (0xd9)
+    if b == 0xd9:
+        n = data[1]
+        return (data[2:2+n].decode("utf-8", errors="replace"), 2+n)
+    # str16 (0xda)
+    if b == 0xda:
+        n = (data[1] << 8) | data[2]
+        return (data[3:3+n].decode("utf-8", errors="replace"), 3+n)
+    # uint8 (0xcc)
+    if b == 0xcc:
+        return (data[1], 2)
+    # uint16 (0xcd)
+    if b == 0xcd:
+        return ((data[1] << 8) | data[2], 3)
+    raise ValueError(f"Unsupported msgpack byte 0x{b:02x}")
+
+def _decode_lxmf_app_data(app_data):
+    """
+    Decode LXMF announce app_data.
+    Sideband encodes it as msgpack fixarray[name_bytes, nil].
+    Uses pure Python decoder — no external library required.
+    Falls back to plain UTF-8 if not valid msgpack.
+    """
+    if not app_data:
+        return ""
+    try:
+        decoded, _ = _msgpack_decode_first(app_data)
+        if isinstance(decoded, list) and len(decoded) >= 1:
+            name_part = decoded[0]
+            if isinstance(name_part, bytes):
+                return name_part.decode("utf-8", errors="replace")
+            elif isinstance(name_part, str):
+                return name_part
+            elif name_part is not None:
+                return str(name_part)
+    except Exception:
+        pass
+    # Fall back to plain UTF-8
+    try:
+        return app_data.decode("utf-8", errors="replace")
+    except Exception:
+        return str(app_data)
 
 def announce_received(destination_hash, announced_identity, app_data):
-    global known_identities
-    hash_str = RNS.prettyhexrep(destination_hash)
-    name = ""
-    if app_data:
-        try:
-            name = app_data.decode("utf-8")
-        except:
-            name = str(app_data)
+    # Always store with plain hex key (no <> brackets)
+    hash_str = RNS.prettyhexrep(destination_hash).strip("<>")
+
+    # FIX: use msgpack-aware decoder to match Sideband's format
+    name = _decode_lxmf_app_data(app_data)
+
     ts = time.strftime("%H:%M:%S")
+    RNS.log(f"ANNOUNCE from {hash_str} name={name!r}")
     if announced_identity is not None:
-        known_identities[hash_str] = announced_identity
+        with _data_lock:
+            known_identities[hash_str] = announced_identity
+        RNS.log(f"Identity stored for {hash_str}")
     entry = {"hash": hash_str, "name": name, "ts": ts}
-    for i, a in enumerate(seen_announces):
-        if a["hash"] == hash_str:
-            seen_announces[i] = entry
-            return
-    seen_announces.append(entry)
+    with _data_lock:
+        for i, a in enumerate(seen_announces):
+            if a["hash"] == hash_str:
+                seen_announces[i] = entry
+                return
+        seen_announces.append(entry)
 
 class AnnounceHandler:
     aspect_filter = "lxmf.delivery"
+
     def received_announce(self, destination_hash, announced_identity, app_data):
+        RNS.log(f"*** ANNOUNCE HANDLER FIRED: {RNS.prettyhexrep(destination_hash)}")
         announce_received(destination_hash, announced_identity, app_data)
+
+class RawAnnounceHandler:
+    """Catches ALL announces regardless of aspect — for debugging"""
+    aspect_filter = None
+
+    def received_announce(self, destination_hash, announced_identity, app_data):
+        RNS.log(f"*** RAW ANNOUNCE: {RNS.prettyhexrep(destination_hash)} app_data={app_data}")
+
+def incoming_link_established(link):
+    """
+    Called when a remote peer opens a link to us.
+    Store it so send_image can reuse it instead of opening a competing link.
+    """
+    peer_hash = RNS.prettyhexrep(link.destination.hash).strip("<>") if link.destination else None
+    RNS.log(f"Incoming link established from {peer_hash}: {link}")
+    if peer_hash:
+        with _data_lock:
+            active_links[peer_hash] = link
+        # When link closes, remove from cache
+        def on_close(lnk):
+            with _data_lock:
+                if active_links.get(peer_hash) is lnk:
+                    del active_links[peer_hash]
+            RNS.log(f"Link to {peer_hash} closed")
+        link.set_link_closed_callback(on_close)
 
 def _noop_signal(sig, handler):
     pass
+
+def _startup_announce_loop():
+    """
+    FIX: Sideband re-announces periodically so peers that come online later
+    can discover it. A single announce at startup is often missed if the other
+    phone's RNode isn't fully ready yet.
+
+    Schedule:
+      +15s  — catch phones that were slow to connect
+      +60s  — catch phones that connected after initial announce
+      then every 10 min forever
+    """
+    for delay in [15, 60]:
+        time.sleep(delay)
+        if destination:
+            try:
+                destination.announce()
+                RNS.log(f"Startup re-announce at +{delay}s")
+            except Exception as e:
+                RNS.log(f"Re-announce error at +{delay}s: {e}")
+
+    while True:
+        time.sleep(600)  # 10 minutes
+        if destination:
+            try:
+                destination.announce()
+                RNS.log("Periodic re-announce sent (10 min)")
+            except Exception as e:
+                RNS.log(f"Periodic re-announce error: {e}")
 
 def _rns_main(bt_socket_wrapper):
     global destination, lxmf_router, reticulum
     try:
         configure_rnode(bt_socket_wrapper)
+
         configdir = "/data/data/com.example.oilpalmharvester/files/.reticulum"
         os.makedirs(configdir, exist_ok=True)
         with open(os.path.join(configdir, "config"), "w") as f:
             f.write(RNS_CONFIG)
 
+        # Suppress signal() calls — we're on a background thread, not main
         original_signal = signal.signal
-        signal.signal  = _noop_signal
-        load_contacts()
+        signal.signal = _noop_signal
+
+        # FIX: init Reticulum FIRST, then attach interface
+        # Previously the interface was appended before RNS.Reticulum() was
+        # called, which risked Transport reinitialising and orphaning the
+        # interface so inbound packets went nowhere.
         reticulum = RNS.Reticulum(configdir=configdir, loglevel=RNS.LOG_DEBUG)
 
         iface = AndroidBTInterface(RNS.Transport, "RNodeBT", bt_socket_wrapper)
         RNS.Transport.interfaces.append(iface)
+        RNS.log(f"AndroidBTInterface attached. Transport interfaces: {[i.name for i in RNS.Transport.interfaces]}")
 
-        identity_path = "/data/data/com.example.oilpalmharvester/files/identity"
+        files_dir = "/data/data/com.example.oilpalmharvester/files"
+        os.makedirs(files_dir, exist_ok=True)
+        identity_path = os.path.join(files_dir, "identity")
         identity = None
         if os.path.exists(identity_path):
             try:
                 identity = RNS.Identity.from_file(identity_path)
-            except:
+                if identity is not None:
+                    RNS.log(f"Loaded existing identity: {RNS.prettyhexrep(identity.hash)}")
+                else:
+                    RNS.log("Identity file corrupt, recreating")
+            except Exception as ie:
+                RNS.log(f"Identity load error: {ie}, recreating")
                 identity = None
         if identity is None:
             identity = RNS.Identity()
             try:
                 identity.to_file(identity_path)
-            except Exception as e:
-                RNS.log(f"WARNING: Could not save identity: {e}")
+                RNS.log(f"Saved new identity: {RNS.prettyhexrep(identity.hash)}")
+            except Exception as se:
+                RNS.log(f"Identity save error: {se}")
 
+        # LXMRouter also calls signal.signal internally — keep noop active through init
         lxmf_router = LXMF.LXMRouter(
             storagepath="/data/data/com.example.oilpalmharvester/files/lxmf",
-            autopeer=True)
-
+            autopeer=True
+        )
         signal.signal = original_signal
+        # LoRa link handshake needs more attempts than the default 5.
+        # Patch the class constant so all messages get more retries.
+        try:
+            LXMF.LXMRouter.MAX_DELIVERY_ATTEMPTS = 20
+            RNS.log("Patched LXMF MAX_DELIVERY_ATTEMPTS=20 for LoRa reliability")
+        except Exception as e:
+            RNS.log(f"Could not patch MAX_DELIVERY_ATTEMPTS: {e}")
 
         destination = lxmf_router.register_delivery_identity(
-            identity, display_name="OilPalm Harvester")
+            identity,
+            display_name="RNS Hello Android"
+        )
+        destination.set_proof_strategy(RNS.Destination.PROVE_ALL)
+        destination.set_link_established_callback(incoming_link_established)
         lxmf_router.register_delivery_callback(message_received)
         RNS.Transport.register_announce_handler(AnnounceHandler())
-        destination.announce()
+        RNS.Transport.register_announce_handler(RawAnnounceHandler())
 
-        addr = RNS.prettyhexrep(destination.hash)
-        RNS.log(f"LXMF address: {addr}")
+        # Initial announce
+        destination.announce()
+        addr = RNS.prettyhexrep(destination.hash).strip("<>")
+        RNS.log(f"LXMF address announced: {addr}")
         _start_result["addr"] = addr
+
+        # FIX: start periodic re-announce loop (daemon thread, won't block shutdown)
+        threading.Thread(target=_startup_announce_loop, daemon=True).start()
 
     except Exception as e:
         import traceback
-        _start_result["error"] = str(e)
         RNS.log(f"RNS start error: {e}\n{traceback.format_exc()}")
+        _start_result["error"] = str(e)
     finally:
         _start_done.set()
 
 def start(bt_socket_wrapper):
     global _rns_started
     if _rns_started:
-        return RNS.prettyhexrep(destination.hash) if destination else "Error: no address"
+        _start_done.wait(timeout=30)
+        if destination:
+            return RNS.prettyhexrep(destination.hash).strip("<>")
+        return _start_result.get("error") or "Timeout"
     _rns_started = True
     _start_done.clear()
     _start_result["addr"] = None
@@ -295,78 +521,99 @@ def start(bt_socket_wrapper):
         return f"Error: {_start_result['error']}"
     return _start_result["addr"] or "Timeout"
 
-def _send_lxmf(dest_hash_hex, title, body):
-    """Internal: send one LXMF message. Returns True on success."""
+def announce():
+    try:
+        if destination:
+            destination.announce()
+            addr = RNS.prettyhexrep(destination.hash).strip("<>")
+            RNS.log(f"Manual announce sent: {addr}")
+            return f"Announced! {addr}"
+        return "Not ready yet"
+    except Exception as e:
+        return f"Error: {e}"
+
+def send_message(dest_hash_hex, text):
     global lxmf_router, destination, known_identities
-    dest_hash_hex = dest_hash_hex.strip()
-    dest_hash     = bytes.fromhex(dest_hash_hex)
-
-    recalled = known_identities.get(dest_hash_hex) or RNS.Identity.recall(dest_hash)
-    if recalled is None:
-        RNS.Transport.request_path(dest_hash)
-        for _ in range(15):
-            time.sleep(2)
-            recalled = known_identities.get(dest_hash_hex) or RNS.Identity.recall(dest_hash)
-            if recalled:
-                break
-    if recalled is None:
-        return False, "No identity known for destination"
-
-    lxmf_dest = RNS.Destination(
-        recalled, RNS.Destination.OUT, RNS.Destination.SINGLE, "lxmf", "delivery")
-
-    msg = LXMF.LXMessage(
-        lxmf_dest, destination, body, title=title,
-        desired_method=LXMF.LXMessage.DIRECT)
-
-    delivered = threading.Event()
-    result    = {"ok": False}
-
-    def on_delivered(m):
-        result["ok"] = True
-        delivered.set()
-
-    def on_failed(m):
-        delivered.set()
-
-    msg.register_delivery_callback(on_delivered)
-    msg.register_failed_callback(on_failed)
-    lxmf_router.handle_outbound(msg)
-    delivered.wait(timeout=60)
-    return result["ok"], "OK" if result["ok"] else "Delivery failed or timed out"
-
-
-def send_photo(dest_hash_hex, photo_path, record_id):
-    """
-    Send a compressed photo as LXMF file field.
-    Compresses to JPEG 320px max, ~15-30KB target.
-    Uses fields={"f": [[filename, mime, data]]} — generic file attachment.
-    Returns "OK" on confirmed delivery, "Error: ..." otherwise.
-    """
-    import base64 as _b64
-    global lxmf_router, destination, known_identities
-
     if not lxmf_router or not destination:
         return "Not connected"
     try:
-        # Compress photo
-        import struct as _struct
-        try:
-            import PIL.Image as _PIL
-            img = _PIL.Image.open(photo_path)
-            img.thumbnail((320, 320), _PIL.Image.LANCZOS)
-            import io as _io
-            buf = _io.BytesIO()
-            img.save(buf, format="JPEG", quality=40)
-            img_bytes = buf.getvalue()
-        except Exception as e:
-            RNS.log(f"PIL compress failed: {e}, reading raw")
-            with open(photo_path, "rb") as f:
-                img_bytes = f.read()
+        # Normalise — always plain hex, no brackets
+        dest_hash_hex = dest_hash_hex.strip().strip("<>")
+        dest_hash = bytes.fromhex(dest_hash_hex)
+        RNS.log(f"Sending to {dest_hash_hex}: {text}")
 
-        kb = len(img_bytes) / 1024
-        RNS.log(f"Photo size after compress: {kb:.1f} KB for record {record_id}")
+        # Get identity — cache first, then RNS recall
+        with _data_lock:
+            recalled_identity = known_identities.get(dest_hash_hex)
+        if recalled_identity is None:
+            recalled_identity = RNS.Identity.recall(dest_hash)
+            RNS.log(f"Identity recall result: {recalled_identity}")
+        else:
+            RNS.log(f"Using cached identity for {dest_hash_hex}")
 
+        if recalled_identity is None:
+            RNS.Transport.request_path(dest_hash)
+            return "Unknown destination — ask them to tap Announce first"
+
+        # Build destination — hash MUST equal dest_hash_hex
+        # lxmf.delivery aspect produces the correct LXMF address hash
+        lxmf_dest = RNS.Destination(
+            recalled_identity,
+            RNS.Destination.OUT,
+            RNS.Destination.SINGLE,
+            "lxmf",
+            "delivery"
+        )
+        actual_hash = RNS.prettyhexrep(lxmf_dest.hash).strip("<>")
+        RNS.log(f"Built dest hash: {actual_hash}, target: {dest_hash_hex}")
+
+        # Verify hash matches — if not, the identity is wrong
+        if actual_hash != dest_hash_hex:
+            RNS.log(f"HASH MISMATCH! Built {actual_hash} but want {dest_hash_hex}")
+            return f"Hash mismatch: got {actual_hash}, expected {dest_hash_hex}. Try re-scanning their address."
+
+        # Request path before sending — helps on LoRa single-hop
+        if not RNS.Transport.has_path(lxmf_dest.hash):
+            RNS.log("No path known, requesting before send...")
+            RNS.Transport.request_path(lxmf_dest.hash)
+            time.sleep(1.0)  # brief wait for path response
+
+        msg = LXMF.LXMessage(
+            lxmf_dest,
+            destination,
+            text,
+            title="",
+            desired_method=LXMF.LXMessage.OPPORTUNISTIC
+        )
+        msg.register_delivery_callback(lambda m: RNS.log(f"Delivered! state={m.state}"))
+        msg.register_failed_callback(lambda m: RNS.log(f"Failed! state={m.state}"))
+        lxmf_router.handle_outbound(msg)
+
+        ts = time.strftime("%H:%M:%S")
+        with _data_lock:
+            chat_messages.append({"from": "me", "text": text, "ts": ts, "direction": "out"})
+        return "Sent!"
+
+    except Exception as e:
+        import traceback
+        RNS.log(f"send_message error: {traceback.format_exc()}")
+        return f"Error: {e}"
+
+def send_image(dest_hash_hex, jpeg_b64):
+    """
+    Send an image using the 'ia' field key (standard LXMF image attachment).
+    jpeg_b64: base64-encoded WebP bytes (string), compressed by Kotlin side
+              to ~3-6 KB via WebP q22 @ 320px — mirrors Sideband's strategy.
+
+    Uses OPPORTUNISTIC method — auto-upgrades to link-based transfer if
+    payload exceeds single-packet limit. MAX_DELIVERY_ATTEMPTS patched to 20
+    at startup gives the LoRa link handshake enough retries to complete.
+    """
+    import base64 as _b64
+    global lxmf_router, destination, known_identities
+    if not lxmf_router or not destination:
+        return "Not connected"
+    try:
         dest_hash_hex = dest_hash_hex.strip().strip("<>")
         dest_hash = bytes.fromhex(dest_hash_hex)
 
@@ -376,7 +623,7 @@ def send_photo(dest_hash_hex, photo_path, record_id):
             recalled_identity = RNS.Identity.recall(dest_hash)
         if recalled_identity is None:
             RNS.Transport.request_path(dest_hash)
-            return "Unknown destination - base station must announce first"
+            return "Unknown destination — ask them to tap Announce first"
 
         lxmf_dest = RNS.Destination(
             recalled_identity,
@@ -387,114 +634,102 @@ def send_photo(dest_hash_hex, photo_path, record_id):
         )
         actual_hash = RNS.prettyhexrep(lxmf_dest.hash).strip("<>")
         if actual_hash != dest_hash_hex:
-            return f"Hash mismatch: got {actual_hash}"
+            return f"Hash mismatch: got {actual_hash}. Try re-scanning their address."
 
-        if not RNS.Transport.has_path(lxmf_dest.hash):
-            RNS.Transport.request_path(lxmf_dest.hash)
-            time.sleep(2.0)
-
-        import os as _os
-        filename = f"harvest_{record_id}_{_os.path.basename(photo_path)}"
-
-        # Use LXMF file field: {"f": [[filename, mimetype, bytes]]}
-        fields = {"f": [[filename, "image/jpeg", img_bytes]]}
-
-        delivered = threading.Event()
-        result = {"ok": False, "state": "unknown"}
-
-        def on_delivered(m):
-            result["ok"] = True
-            result["state"] = "delivered"
-            delivered.set()
-            RNS.log(f"Photo delivered for record {record_id}")
-
-        def on_failed(m):
-            result["state"] = f"failed state={m.state}"
-            delivered.set()
-            RNS.log(f"Photo failed for record {record_id}: state={m.state}")
+        img_bytes = _b64.b64decode(jpeg_b64)
+        kb = len(img_bytes) / 1024
+        RNS.log(f"Sending WebP image to {dest_hash_hex}: {kb:.1f} KB")
 
         msg = LXMF.LXMessage(
             lxmf_dest,
             destination,
             "",
-            title=f"HARVEST_PHOTO:{record_id}",
+            title="",
             desired_method=LXMF.LXMessage.OPPORTUNISTIC,
-            fields=fields
+            fields={"ia": ["webp", img_bytes]}
         )
-        msg.register_delivery_callback(on_delivered)
-        msg.register_failed_callback(on_failed)
+        msg.register_delivery_callback(lambda m: RNS.log(f"Image delivered! state={m.state}"))
+        msg.register_failed_callback(lambda m: RNS.log(f"Image failed! state={m.state}"))
+
+        # If the peer already has an active link open to us, reuse it to avoid
+        # a simultaneous link-open collision (both sides sending link requests
+        # at the same time — neither responds to the other's).
+        with _data_lock:
+            existing_link = active_links.get(dest_hash_hex)
+
+        if existing_link and existing_link.status == RNS.Link.ACTIVE:
+            RNS.log(f"Reusing existing active link to {dest_hash_hex}")
+            try:
+                msg.set_delivery_via(existing_link)
+            except Exception as e:
+                RNS.log(f"set_delivery_via not supported: {e} — falling back to handle_outbound")
+        else:
+            # No active link — random backoff before initiating to reduce
+            # chance of a simultaneous link-open collision with the remote side.
+            import random
+            backoff = random.uniform(1.0, 4.0)
+            RNS.log(f"No active link to {dest_hash_hex}, backoff {backoff:.1f}s before link open")
+            time.sleep(backoff)
+
         lxmf_router.handle_outbound(msg)
 
-        # Wait up to 3 minutes for LoRa link transfer
-        delivered.wait(timeout=180)
-        if result["ok"]:
-            return "OK"
-        else:
-            return f"Error: {result['state']}"
+        ts = time.strftime("%H:%M:%S")
+        with _data_lock:
+            chat_messages.append({
+                "from": "me",
+                "text": f"IMG_B64:{jpeg_b64}",
+                "ts": ts,
+                "direction": "out"
+            })
+        size_str = f"{kb:.1f} KB"
+        return f"Sending image ({size_str}) — may take 30–90s over LoRa"
 
     except Exception as e:
         import traceback
-        RNS.log(f"send_photo error: {traceback.format_exc()}")
+        RNS.log(f"send_image error: {traceback.format_exc()}")
         return f"Error: {e}"
 
-def send_csv(dest_hash_hex, csv_text, filename):
-    """Send CSV records as an LXMF message."""
-    if not lxmf_router or not destination:
-        return "Not connected"
-    ok, msg = _send_lxmf(dest_hash_hex, f"HARVEST_CSV:{filename}", csv_text)
-    return "OK" if ok else f"Error: {msg}"
 
-def send_photo(dest_hash_hex, photo_path, record_id):
-    """Send a photo as base64-encoded LXMF message."""
-    if not lxmf_router or not destination:
-        return "Not connected"
+def get_messages():
+    with _data_lock:
+        return list(chat_messages)
+
+def get_announces():
+    with _data_lock:
+        return list(seen_announces)
+
+def get_address():
+    global destination
+    if destination:
+        return RNS.prettyhexrep(destination.hash).strip("<>")
+    return "Not initialized"
+
+# ── Contacts — thin delegation to contacts.py ─────────────────────────────────
+# RNS layer never uses these. Only the UI layer calls them via RNSBridge.
+
+import contacts as _contacts_mod
+
+def save_contact(hash_hex: str, name: str) -> str:
     try:
-        import base64
-        with open(photo_path, "rb") as f:
-            b64 = base64.b64encode(f.read()).decode("utf-8")
-        filename = os.path.basename(photo_path)
-        body = f"HARVEST_PHOTO:{record_id}:{filename}:{b64}"
-        ok, msg = _send_lxmf(dest_hash_hex, f"HARVEST_PHOTO:{record_id}", body)
-        return "OK" if ok else f"Error: {msg}"
+        _contacts_mod.save(hash_hex, name)
+        return "OK"
     except Exception as e:
         return f"Error: {e}"
 
-def send_message(dest_hash_hex, text):
-    if not lxmf_router or not destination:
-        return "Not connected"
-    ok, msg = _send_lxmf(dest_hash_hex, "", text)
-    if ok:
-        ts = time.strftime("%H:%M:%S")
-        chat_messages.append({"from": "me", "text": text, "ts": ts, "direction": "out"})
-        return "Sent!"
-    return f"Error: {msg}"
+def delete_contact(hash_hex: str) -> str:
+    try:
+        _contacts_mod.delete(hash_hex)
+        return "OK"
+    except Exception as e:
+        return f"Error: {e}"
 
-def get_messages():
-    result = []
-    for m in chat_messages:
-        entry = dict(m)
-        h = entry.get("from","").replace("<","").replace(">","")
-        entry["display_from"] = contacts.get(h, entry.get("from",""))
-        result.append(entry)
-    return result
+def get_contacts() -> list:
+    return _contacts_mod.get_all()
 
-def get_announces():
-    result = []
-    for a in seen_announces:
-        entry = dict(a)
-        h = entry.get("hash","").replace("<","").replace(">","")
-        entry["display"] = contacts.get(h, entry.get("name",""))
-        result.append(entry)
-    return result
+def resolve_name(hash_hex: str, fallback: str = "") -> str:
+    return _contacts_mod.resolve(hash_hex, fallback)
 
-def get_address():
-    return RNS.prettyhexrep(destination.hash) if destination else "Not initialized"
-
-
-
-
-
-# -- RNode config bridge functions --------------------------------------------
+# ── RNode config — bridge functions ───────────────────────────────────────────
 
 import rnode_config as _rnode_cfg_mod
 
@@ -505,3 +740,98 @@ def save_rnode_config(frequency: int, bandwidth: int, txpower: int, sf: int, cr:
     return _rnode_cfg_mod.save(
         int(frequency), int(bandwidth), int(txpower), int(sf), int(cr)
     )
+
+# -- Harvest CSV sync ---------------------------------------------------------
+
+def send_csv(dest_hash_hex, csv_text, filename):
+    if not lxmf_router or not destination:
+        return "Not connected"
+    try:
+        dest_hash_hex = dest_hash_hex.strip().strip("<>")
+        dest_hash = bytes.fromhex(dest_hash_hex)
+        with _data_lock:
+            recalled_identity = known_identities.get(dest_hash_hex)
+        if recalled_identity is None:
+            recalled_identity = RNS.Identity.recall(dest_hash)
+        if recalled_identity is None:
+            RNS.Transport.request_path(dest_hash)
+            return "Unknown destination - base station must announce first"
+        lxmf_dest = RNS.Destination(recalled_identity, RNS.Destination.OUT,
+            RNS.Destination.SINGLE, "lxmf", "delivery")
+        actual_hash = RNS.prettyhexrep(lxmf_dest.hash).strip("<>")
+        if actual_hash != dest_hash_hex:
+            return f"Hash mismatch: got {actual_hash}"
+        delivered = threading.Event()
+        result = {"ok": False}
+        def on_delivered(m): result["ok"] = True; delivered.set()
+        def on_failed(m): delivered.set()
+        msg = LXMF.LXMessage(lxmf_dest, destination, csv_text,
+            title=f"HARVEST_CSV:{filename}",
+            desired_method=LXMF.LXMessage.OPPORTUNISTIC)
+        msg.register_delivery_callback(on_delivered)
+        msg.register_failed_callback(on_failed)
+        lxmf_router.handle_outbound(msg)
+        delivered.wait(timeout=120)
+        return "OK" if result["ok"] else "Error: delivery timed out"
+    except Exception as e:
+        import traceback
+        RNS.log(f"send_csv error: {traceback.format_exc()}")
+        return f"Error: {e}"
+
+# -- Harvest photo via RNS file field -----------------------------------------
+
+def send_photo(dest_hash_hex, photo_path, record_id):
+    if not lxmf_router or not destination:
+        return "Not connected"
+    try:
+        try:
+            import PIL.Image as _PIL
+            import io as _io
+            img = _PIL.Image.open(photo_path)
+            img.thumbnail((320, 320), _PIL.Image.LANCZOS)
+            buf = _io.BytesIO()
+            img.save(buf, format="JPEG", quality=40)
+            img_bytes = buf.getvalue()
+        except Exception as e:
+            RNS.log(f"PIL compress failed: {e}, reading raw")
+            with open(photo_path, "rb") as f:
+                img_bytes = f.read()
+        kb = len(img_bytes) / 1024
+        RNS.log(f"Photo {kb:.1f} KB for record {record_id}")
+        dest_hash_hex = dest_hash_hex.strip().strip("<>")
+        dest_hash = bytes.fromhex(dest_hash_hex)
+        with _data_lock:
+            recalled_identity = known_identities.get(dest_hash_hex)
+        if recalled_identity is None:
+            recalled_identity = RNS.Identity.recall(dest_hash)
+        if recalled_identity is None:
+            RNS.Transport.request_path(dest_hash)
+            return "Unknown destination - base station must announce first"
+        lxmf_dest = RNS.Destination(recalled_identity, RNS.Destination.OUT,
+            RNS.Destination.SINGLE, "lxmf", "delivery")
+        actual_hash = RNS.prettyhexrep(lxmf_dest.hash).strip("<>")
+        if actual_hash != dest_hash_hex:
+            return f"Hash mismatch: got {actual_hash}"
+        if not RNS.Transport.has_path(lxmf_dest.hash):
+            RNS.Transport.request_path(lxmf_dest.hash)
+            time.sleep(2.0)
+        import os as _os
+        fname = f"harvest_{record_id}_{_os.path.basename(photo_path)}"
+        fields = {"f": [[fname, "image/jpeg", img_bytes]]}
+        delivered = threading.Event()
+        result = {"ok": False, "state": "unknown"}
+        def on_delivered(m): result["ok"] = True; result["state"] = "delivered"; delivered.set()
+        def on_failed(m): result["state"] = f"failed state={m.state}"; delivered.set()
+        msg = LXMF.LXMessage(lxmf_dest, destination, "",
+            title=f"HARVEST_PHOTO:{record_id}",
+            desired_method=LXMF.LXMessage.OPPORTUNISTIC,
+            fields=fields)
+        msg.register_delivery_callback(on_delivered)
+        msg.register_failed_callback(on_failed)
+        lxmf_router.handle_outbound(msg)
+        delivered.wait(timeout=180)
+        return "OK" if result["ok"] else f"Error: {result['state']}"
+    except Exception as e:
+        import traceback
+        RNS.log(f"send_photo error: {traceback.format_exc()}")
+        return f"Error: {e}"
