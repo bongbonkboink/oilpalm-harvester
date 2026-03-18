@@ -15,7 +15,6 @@ import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
-import androidx.core.content.FileProvider
 import androidx.exifinterface.media.ExifInterface
 import androidx.lifecycle.lifecycleScope
 import com.chaquo.python.Python
@@ -221,48 +220,49 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // -- Photo transfer via Bluetooth OBEX ------------------------------------
-
+    // -- Photo transfer via RNS --------------------------------------------------
     private fun sendPendingPhotos() {
-        lifecycleScope.launch {
-            val dao     = HarvestDatabase.getInstance(this@MainActivity).harvestDao()
-            val pending = dao.getUnsyncedPhotos()
+        val prefs    = getSharedPreferences("oilpalm", MODE_PRIVATE)
+        val baseAddr = prefs.getString("base_station_address", "") ?: ""
+        if (baseAddr.isEmpty()) { toast("Set base station address in Settings first"); return }
+        if (!rnsConnected)      { toast("Connect to RNode first"); return }
 
+        btnSendPhotos.isEnabled = false
+        btnSendPhotos.text = "Sending photos..."
+
+        scope.launch {
+            val dao     = HarvestDatabase.getInstance(this@MainActivity).harvestDao()
+            val pending = withContext(Dispatchers.IO) { dao.getUnsyncedPhotos() }
             if (pending.isEmpty()) {
                 toast("No pending photos")
+                btnSendPhotos.isEnabled = true
+                btnSendPhotos.text = "Send Photos via RNS"
                 return@launch
             }
-
+            toast("Sending ${pending.size} photo(s) via RNS...")
+            var sent = 0
             for (record in pending) {
-                val file = File(record.photoPath)
+                val file = java.io.File(record.photoPath)
                 if (!file.exists()) {
-                    dao.markPhotoSynced(record.id)
+                    withContext(Dispatchers.IO) { dao.markPhotoSynced(record.id) }
                     continue
                 }
-
-                // Use Android's built-in Bluetooth file share (OBEX)
-                val uri = FileProvider.getUriForFile(
-                    this@MainActivity,
-                    "com.example.oilpalmharvester.fileprovider",
-                    file)
-
-                val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                    type = "image/jpeg"
-                    putExtra(Intent.EXTRA_STREAM, uri)
-                    putExtra(Intent.EXTRA_SUBJECT,
-                        "Harvest photo - Block ${record.blockId}")
-                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                toast("Sending photo ${sent+1}/${pending.size} (Block ${record.blockId})...")
+                val result = withContext(Dispatchers.IO) {
+                    RNSBridge.sendPhoto(baseAddr, record.photoPath, record.id)
                 }
-
-                // Launch the BT share chooser for this photo
-                startActivity(Intent.createChooser(
-                    shareIntent,
-                    "Send photo for block ${record.blockId}"))
-
-                // Mark as photo-synced — user is responsible for completing the transfer
-                dao.markPhotoSynced(record.id)
+                if (result == "OK") {
+                    withContext(Dispatchers.IO) { dao.markPhotoSynced(record.id) }
+                    sent++
+                } else {
+                    toast("Photo failed for block ${record.blockId}: $result")
+                    break
+                }
             }
+            toast("$sent/${pending.size} photo(s) sent")
             refreshUnsyncedCount()
+            btnSendPhotos.isEnabled = true
+            btnSendPhotos.text = "Send Photos via RNS"
         }
     }
 
@@ -767,6 +767,8 @@ class MainActivity : AppCompatActivity() {
     private fun toast(msg: String) =
         Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
 }
+
+
 
 
 

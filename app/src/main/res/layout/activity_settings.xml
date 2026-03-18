@@ -1,64 +1,181 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout
+<ScrollView
     xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:background="#1a1a2e"
-    android:padding="24dp">
+    android:background="#1a1a2e">
 
-    <TextView
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Settings"
-        android:textColor="#00d4ff"
-        android:textSize="22sp"
-        android:textStyle="bold"
-        android:layout_marginBottom="32dp"/>
+        android:orientation="vertical"
+        android:padding="20dp">
 
-    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-        android:text="Harvester ID" android:textColor="#aaaaaa" android:textSize="12sp"/>
-    <EditText
-        android:id="@+id/etHarvesterId"
-        android:layout_width="match_parent"
-        android:layout_height="56dp"
-        android:textColor="#ffffff"
-        android:textColorHint="#555555"
-        android:backgroundTint="#0f3460"
-        android:inputType="text"
-        android:textSize="16sp"
-        android:layout_marginBottom="24dp"/>
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="SETTINGS"
+            android:textColor="#00d4ff"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            android:letterSpacing="0.1"
+            android:layout_marginBottom="24dp"/>
 
-    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-        android:text="Base Station RNS Address" android:textColor="#aaaaaa" android:textSize="12sp"/>
-    <EditText
-        android:id="@+id/etBaseStation"
-        android:layout_width="match_parent"
-        android:layout_height="56dp"
-        android:hint="e.g. a1b2c3d4e5f6..."
-        android:textColor="#ffffff"
-        android:textColorHint="#555555"
-        android:backgroundTint="#0f3460"
-        android:inputType="text"
-        android:fontFamily="monospace"
-        android:textSize="13sp"
-        android:layout_marginBottom="8dp"/>
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="The LXMF address of the receiving base station"
-        android:textColor="#555555"
-        android:textSize="11sp"
-        android:layout_marginBottom="32dp"/>
+        <!-- Harvester ID -->
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:text="HARVESTER ID" android:textColor="#aaaaaa" android:textSize="13sp"
+            android:letterSpacing="0.1" android:layout_marginBottom="6dp"/>
+        <EditText
+            android:id="@+id/etHarvesterId"
+            android:layout_width="match_parent"
+            android:layout_height="64dp"
+            android:textColor="#ffffff"
+            android:textColorHint="#555555"
+            android:backgroundTint="#0f3460"
+            android:textSize="18sp"
+            android:paddingStart="16dp"
+            android:layout_marginBottom="20dp"/>
 
-    <Button
-        android:id="@+id/btnSaveSettings"
-        android:layout_width="match_parent"
-        android:layout_height="56dp"
-        android:text="Save Settings"
-        android:backgroundTint="#00d4ff"
-        android:textColor="#1a1a2e"
-        android:textSize="16sp"
-        android:textStyle="bold"/>
+        <!-- Base Station Address -->
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:text="BASE STATION RNS ADDRESS" android:textColor="#aaaaaa" android:textSize="13sp"
+            android:letterSpacing="0.1" android:layout_marginBottom="6dp"/>
+        <EditText
+            android:id="@+id/etBaseStation"
+            android:layout_width="match_parent"
+            android:layout_height="64dp"
+            android:hint="32-char hex address"
+            android:textColor="#ffffff"
+            android:textColorHint="#555555"
+            android:backgroundTint="#0f3460"
+            android:textSize="14sp"
+            android:fontFamily="monospace"
+            android:paddingStart="16dp"
+            android:inputType="textNoSuggestions"
+            android:layout_marginBottom="20dp"/>
 
-</LinearLayout>
+        <Button
+            android:id="@+id/btnSaveSettings"
+            android:layout_width="match_parent"
+            android:layout_height="64dp"
+            android:text="SAVE"
+            android:backgroundTint="#00d4ff"
+            android:textColor="#1a1a2e"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="32dp"/>
+
+        <!-- Divider -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="#0f3460"
+            android:layout_marginBottom="24dp"/>
+
+        <!-- RNode Radio Config -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="RNODE RADIO CONFIG"
+            android:textColor="#00d4ff"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            android:letterSpacing="0.1"
+            android:layout_marginBottom="6dp"/>
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Changes apply on next RNode connection"
+            android:textColor="#555555"
+            android:textSize="13sp"
+            android:layout_marginBottom="20dp"/>
+
+        <!-- Frequency -->
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:text="FREQUENCY (MHz)" android:textColor="#aaaaaa" android:textSize="13sp"
+            android:layout_marginBottom="6dp"/>
+        <EditText
+            android:id="@+id/etFrequency"
+            android:layout_width="match_parent"
+            android:layout_height="64dp"
+            android:hint="433.025"
+            android:textColor="#ffffff"
+            android:textColorHint="#555555"
+            android:backgroundTint="#0f3460"
+            android:inputType="numberDecimal"
+            android:textSize="18sp"
+            android:paddingStart="16dp"
+            android:layout_marginBottom="16dp"/>
+
+        <!-- Bandwidth -->
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:text="BANDWIDTH" android:textColor="#aaaaaa" android:textSize="13sp"
+            android:layout_marginBottom="6dp"/>
+        <Spinner
+            android:id="@+id/spinnerBandwidth"
+            android:layout_width="match_parent"
+            android:layout_height="64dp"
+            android:background="#0f3460"
+            android:layout_marginBottom="16dp"/>
+
+        <!-- TX Power -->
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:text="TX POWER (0-17 dBm)" android:textColor="#aaaaaa" android:textSize="13sp"
+            android:layout_marginBottom="6dp"/>
+        <EditText
+            android:id="@+id/etTxPower"
+            android:layout_width="match_parent"
+            android:layout_height="64dp"
+            android:hint="17"
+            android:textColor="#ffffff"
+            android:textColorHint="#555555"
+            android:backgroundTint="#0f3460"
+            android:inputType="number"
+            android:textSize="18sp"
+            android:paddingStart="16dp"
+            android:layout_marginBottom="16dp"/>
+
+        <!-- Spreading Factor -->
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:text="SPREADING FACTOR" android:textColor="#aaaaaa" android:textSize="13sp"
+            android:layout_marginBottom="6dp"/>
+        <Spinner
+            android:id="@+id/spinnerSf"
+            android:layout_width="match_parent"
+            android:layout_height="64dp"
+            android:background="#0f3460"
+            android:layout_marginBottom="16dp"/>
+
+        <!-- Coding Rate -->
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:text="CODING RATE" android:textColor="#aaaaaa" android:textSize="13sp"
+            android:layout_marginBottom="6dp"/>
+        <Spinner
+            android:id="@+id/spinnerCr"
+            android:layout_width="match_parent"
+            android:layout_height="64dp"
+            android:background="#0f3460"
+            android:layout_marginBottom="20dp"/>
+
+        <TextView
+            android:id="@+id/tvRNodeStatus"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text=""
+            android:textColor="#00d4ff"
+            android:textSize="14sp"
+            android:layout_marginBottom="12dp"/>
+
+        <Button
+            android:id="@+id/btnSaveRNode"
+            android:layout_width="match_parent"
+            android:layout_height="64dp"
+            android:text="SAVE RADIO CONFIG"
+            android:backgroundTint="#0f3460"
+            android:textColor="#00d4ff"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="32dp"/>
+
+    </LinearLayout>
+</ScrollView>

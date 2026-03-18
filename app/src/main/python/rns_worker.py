@@ -335,6 +335,108 @@ def _send_lxmf(dest_hash_hex, title, body):
     delivered.wait(timeout=60)
     return result["ok"], "OK" if result["ok"] else "Delivery failed or timed out"
 
+
+def send_photo(dest_hash_hex, photo_path, record_id):
+    """
+    Send a compressed photo as LXMF file field.
+    Compresses to JPEG 320px max, ~15-30KB target.
+    Uses fields={"f": [[filename, mime, data]]} — generic file attachment.
+    Returns "OK" on confirmed delivery, "Error: ..." otherwise.
+    """
+    import base64 as _b64
+    global lxmf_router, destination, known_identities
+
+    if not lxmf_router or not destination:
+        return "Not connected"
+    try:
+        # Compress photo
+        import struct as _struct
+        try:
+            import PIL.Image as _PIL
+            img = _PIL.Image.open(photo_path)
+            img.thumbnail((320, 320), _PIL.Image.LANCZOS)
+            import io as _io
+            buf = _io.BytesIO()
+            img.save(buf, format="JPEG", quality=40)
+            img_bytes = buf.getvalue()
+        except Exception as e:
+            RNS.log(f"PIL compress failed: {e}, reading raw")
+            with open(photo_path, "rb") as f:
+                img_bytes = f.read()
+
+        kb = len(img_bytes) / 1024
+        RNS.log(f"Photo size after compress: {kb:.1f} KB for record {record_id}")
+
+        dest_hash_hex = dest_hash_hex.strip().strip("<>")
+        dest_hash = bytes.fromhex(dest_hash_hex)
+
+        with _data_lock:
+            recalled_identity = known_identities.get(dest_hash_hex)
+        if recalled_identity is None:
+            recalled_identity = RNS.Identity.recall(dest_hash)
+        if recalled_identity is None:
+            RNS.Transport.request_path(dest_hash)
+            return "Unknown destination - base station must announce first"
+
+        lxmf_dest = RNS.Destination(
+            recalled_identity,
+            RNS.Destination.OUT,
+            RNS.Destination.SINGLE,
+            "lxmf",
+            "delivery"
+        )
+        actual_hash = RNS.prettyhexrep(lxmf_dest.hash).strip("<>")
+        if actual_hash != dest_hash_hex:
+            return f"Hash mismatch: got {actual_hash}"
+
+        if not RNS.Transport.has_path(lxmf_dest.hash):
+            RNS.Transport.request_path(lxmf_dest.hash)
+            time.sleep(2.0)
+
+        import os as _os
+        filename = f"harvest_{record_id}_{_os.path.basename(photo_path)}"
+
+        # Use LXMF file field: {"f": [[filename, mimetype, bytes]]}
+        fields = {"f": [[filename, "image/jpeg", img_bytes]]}
+
+        delivered = threading.Event()
+        result = {"ok": False, "state": "unknown"}
+
+        def on_delivered(m):
+            result["ok"] = True
+            result["state"] = "delivered"
+            delivered.set()
+            RNS.log(f"Photo delivered for record {record_id}")
+
+        def on_failed(m):
+            result["state"] = f"failed state={m.state}"
+            delivered.set()
+            RNS.log(f"Photo failed for record {record_id}: state={m.state}")
+
+        msg = LXMF.LXMessage(
+            lxmf_dest,
+            destination,
+            "",
+            title=f"HARVEST_PHOTO:{record_id}",
+            desired_method=LXMF.LXMessage.OPPORTUNISTIC,
+            fields=fields
+        )
+        msg.register_delivery_callback(on_delivered)
+        msg.register_failed_callback(on_failed)
+        lxmf_router.handle_outbound(msg)
+
+        # Wait up to 3 minutes for LoRa link transfer
+        delivered.wait(timeout=180)
+        if result["ok"]:
+            return "OK"
+        else:
+            return f"Error: {result['state']}"
+
+    except Exception as e:
+        import traceback
+        RNS.log(f"send_photo error: {traceback.format_exc()}")
+        return f"Error: {e}"
+
 def send_csv(dest_hash_hex, csv_text, filename):
     """Send CSV records as an LXMF message."""
     if not lxmf_router or not destination:
@@ -387,6 +489,7 @@ def get_announces():
 
 def get_address():
     return RNS.prettyhexrep(destination.hash) if destination else "Not initialized"
+
 
 
 

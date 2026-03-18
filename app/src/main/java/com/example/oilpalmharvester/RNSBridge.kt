@@ -1,4 +1,4 @@
-package com.example.oilpalmharvester
+﻿package com.example.oilpalmharvester
 
 import com.chaquo.python.Python
 
@@ -17,10 +17,24 @@ object RNSBridge {
 
     fun sendCsv(destHashHex: String, csvText: String, filename: String): String =
         try { worker.callAttr("send_csv", destHashHex, csvText, filename).toString() }
+
+    fun sendPhoto(destHashHex: String, photoPath: String, recordId: Long): String =
+        try { worker.callAttr("send_photo", destHashHex, photoPath, recordId.toString()).toString() }
+        catch (e: Exception) { "Error: ${e.message}" }
         catch (e: Exception) { "Error: ${e.message}" }
 
     fun sendMessage(destHashHex: String, text: String): String =
         try { worker.callAttr("send_message", destHashHex, text).toString() }
+        catch (e: Exception) { "Error: ${e.message}" }
+
+        fun getRnodeConfig(): Map<String, Any> =
+        try {
+            val raw = worker.callAttr("get_rnode_config")
+            raw.asMap().entries.associate { (k, v) -> k.toString() to (v.toString() as Any) }
+        } catch (e: Exception) { emptyMap() }
+
+    fun saveRnodeConfig(freq: Int, bw: Int, tx: Int, sf: Int, cr: Int): String =
+        try { worker.callAttr("save_rnode_config", freq, bw, tx, sf, cr).toString() }
         catch (e: Exception) { "Error: ${e.message}" }
 
     fun getAddress(): String =
@@ -49,3 +63,5 @@ object RNSBridge {
         try { worker.callAttr("resolve_name", hashHex, "").toString() }
         catch (e: Exception) { "" }
 }
+
+
