@@ -1,4 +1,4 @@
-package com.example.oilpalmharvester
+﻿package com.example.oilpalmharvester
 
 import android.os.Bundle
 import android.widget.*
@@ -98,8 +98,13 @@ class SettingsActivity : AppCompatActivity() {
         crAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
         spinnerCr.adapter = crAdapter
 
-        // Load current RNode config
-        try {
+        // Load current RNode config - only if Python already started
+        if (!com.chaquo.python.Python.isStarted()) {
+            etFrequency.setText("433.025")
+            etTxPower.setText("17")
+            tvRNodeStatus.text = "Connect to RNode first to load current config"
+            tvRNodeStatus.setTextColor(android.graphics.Color.parseColor("#aaaaaa"))
+        } else try {
             val py = Python.getInstance()
             val cfg = py.getModule("rns_worker").callAttr("get_rnode_config")
             val cfgMap = cfg.asMap()
@@ -145,3 +150,4 @@ class SettingsActivity : AppCompatActivity() {
 
     private fun toast(msg: String) = Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
 }
+
