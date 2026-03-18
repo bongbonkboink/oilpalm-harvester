@@ -493,3 +493,15 @@ def get_address():
 
 
 
+
+# -- RNode config bridge functions --------------------------------------------
+
+import rnode_config as _rnode_cfg_mod
+
+def get_rnode_config() -> dict:
+    return _rnode_cfg_mod.get()
+
+def save_rnode_config(frequency: int, bandwidth: int, txpower: int, sf: int, cr: int) -> str:
+    return _rnode_cfg_mod.save(
+        int(frequency), int(bandwidth), int(txpower), int(sf), int(cr)
+    )
