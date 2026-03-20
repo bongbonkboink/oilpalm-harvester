@@ -423,7 +423,7 @@ def _rns_main(bt_socket_wrapper):
     try:
         configure_rnode(bt_socket_wrapper)
 
-        configdir = "/data/data/com.example.rnshello/files/.reticulum"
+        configdir = "/data/data/com.example.oilpalmharvester/files/.reticulum"
         os.makedirs(configdir, exist_ok=True)
         with open(os.path.join(configdir, "config"), "w") as f:
             f.write(RNS_CONFIG)
@@ -442,7 +442,7 @@ def _rns_main(bt_socket_wrapper):
         RNS.Transport.interfaces.append(iface)
         RNS.log(f"AndroidBTInterface attached. Transport interfaces: {[i.name for i in RNS.Transport.interfaces]}")
 
-        files_dir = "/data/data/com.example.rnshello/files"
+        files_dir = "/data/data/com.example.oilpalmharvester/files"
         os.makedirs(files_dir, exist_ok=True)
         identity_path = os.path.join(files_dir, "identity")
         identity = None
@@ -466,7 +466,7 @@ def _rns_main(bt_socket_wrapper):
 
         # LXMRouter also calls signal.signal internally — keep noop active through init
         lxmf_router = LXMF.LXMRouter(
-            storagepath="/data/data/com.example.rnshello/files/lxmf",
+            storagepath="/data/data/com.example.oilpalmharvester/files/lxmf",
             autopeer=True
         )
         signal.signal = original_signal
