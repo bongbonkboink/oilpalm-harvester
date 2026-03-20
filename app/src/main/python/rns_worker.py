@@ -423,7 +423,7 @@ def _rns_main(bt_socket_wrapper):
     try:
         configure_rnode(bt_socket_wrapper)
 
-        configdir = "/data/data/com.example.oilpalmharvester/files/.reticulum"
+        configdir = "/data/data/com.example.rnshello/files/.reticulum"
         os.makedirs(configdir, exist_ok=True)
         with open(os.path.join(configdir, "config"), "w") as f:
             f.write(RNS_CONFIG)
@@ -442,7 +442,7 @@ def _rns_main(bt_socket_wrapper):
         RNS.Transport.interfaces.append(iface)
         RNS.log(f"AndroidBTInterface attached. Transport interfaces: {[i.name for i in RNS.Transport.interfaces]}")
 
-        files_dir = "/data/data/com.example.oilpalmharvester/files"
+        files_dir = "/data/data/com.example.rnshello/files"
         os.makedirs(files_dir, exist_ok=True)
         identity_path = os.path.join(files_dir, "identity")
         identity = None
@@ -464,29 +464,14 @@ def _rns_main(bt_socket_wrapper):
             except Exception as se:
                 RNS.log(f"Identity save error: {se}")
 
-        # Delete all cached ratchet files before LXMRouter starts
-        import glob as _glob
-        for _rf in _glob.glob("/data/data/com.example.oilpalmharvester/files/lxmf/lxmf/ratchets/*"):
-            try: os.remove(_rf)
-            except Exception: pass
-        RNS.log("Ratchet cache cleared")
-
-        # Monkey-patch Destination.enable_ratchets to a no-op at CLASS level
-        # so LXMRouter cannot enable ratchets during register_delivery_identity()
-        try:
-            _orig_enable = RNS.Destination.enable_ratchets
-            RNS.Destination.enable_ratchets = lambda self, *a, **kw: RNS.log("enable_ratchets suppressed")
-            RNS.log("Patched Destination.enable_ratchets -> no-op")
-        except Exception as _pe:
-            _orig_enable = None
-            RNS.log(f"Could not patch enable_ratchets: {_pe}")
-
         # LXMRouter also calls signal.signal internally — keep noop active through init
         lxmf_router = LXMF.LXMRouter(
-            storagepath="/data/data/com.example.oilpalmharvester/files/lxmf",
-            autopeer=False
+            storagepath="/data/data/com.example.rnshello/files/lxmf",
+            autopeer=True
         )
         signal.signal = original_signal
+        # LoRa link handshake needs more attempts than the default 5.
+        # Patch the class constant so all messages get more retries.
         try:
             LXMF.LXMRouter.MAX_DELIVERY_ATTEMPTS = 20
             RNS.log("Patched LXMF MAX_DELIVERY_ATTEMPTS=20 for LoRa reliability")
@@ -497,23 +482,6 @@ def _rns_main(bt_socket_wrapper):
             identity,
             display_name="RNS Hello Android"
         )
-
-        # Restore original enable_ratchets
-        if _orig_enable is not None:
-            try:
-                RNS.Destination.enable_ratchets = _orig_enable
-                RNS.log("enable_ratchets restored")
-            except Exception: pass
-
-        # Also null out ratchets on the destination object directly
-        try:
-            destination.ratchets = None
-        except Exception: pass
-        try:
-            destination.ratchets_enabled = False
-        except Exception: pass
-        RNS.log(f"Ratchets suppressed on delivery destination")
-
         destination.set_proof_strategy(RNS.Destination.PROVE_ALL)
         destination.set_link_established_callback(incoming_link_established)
         lxmf_router.register_delivery_callback(message_received)
@@ -570,7 +538,7 @@ def send_message(dest_hash_hex, text):
         return "Not connected"
     try:
         # Normalise — always plain hex, no brackets
-        dest_hash_hex = ''.join(c for c in dest_hash_hex.strip().strip('<>') if c in '0123456789abcdefABCDEF')
+        dest_hash_hex = dest_hash_hex.strip().strip("<>")
         dest_hash = bytes.fromhex(dest_hash_hex)
         RNS.log(f"Sending to {dest_hash_hex}: {text}")
 
@@ -646,7 +614,7 @@ def send_image(dest_hash_hex, jpeg_b64):
     if not lxmf_router or not destination:
         return "Not connected"
     try:
-        dest_hash_hex = ''.join(c for c in dest_hash_hex.strip().strip('<>') if c in '0123456789abcdefABCDEF')
+        dest_hash_hex = dest_hash_hex.strip().strip("<>")
         dest_hash = bytes.fromhex(dest_hash_hex)
 
         with _data_lock:
@@ -675,7 +643,7 @@ def send_image(dest_hash_hex, jpeg_b64):
         msg = LXMF.LXMessage(
             lxmf_dest,
             destination,
-            f"Harvest photo for record {record_id}",
+            "",
             title="",
             desired_method=LXMF.LXMessage.OPPORTUNISTIC,
             fields={"ia": ["webp", img_bytes]}
@@ -773,121 +741,70 @@ def save_rnode_config(frequency: int, bandwidth: int, txpower: int, sf: int, cr:
         int(frequency), int(bandwidth), int(txpower), int(sf), int(cr)
     )
 
-# -- Harvest CSV sync ---------------------------------------------------------
+# ── Harvest CSV sender ────────────────────────────────────────────────────────
+# Sends CSV text as a plain RNS DATA packet directly over KISS.
+# Bypasses LXMF and ratchet encryption entirely so the RNS Harvest Receiver
+# Android app (Kotlin) can read it without a full RNS crypto stack.
 
-def send_csv(dest_hash_hex, csv_text, filename):
-    if not lxmf_router or not destination:
+def _build_rns_data_packet(dest_hash_10: bytes, payload: bytes) -> bytes:
+    """
+    Minimal RNS DATA packet with PLAIN (unencrypted) destination.
+    Header byte 0 = 0x08:
+      bits 7:6 = 00  header_type = 0 (single address)
+      bits 5:4 = 00  propagation  = BROADCAST
+      bits 3:2 = 10  dest_type    = PLAIN (no encryption)
+      bits 1:0 = 00  packet_type  = DATA
+    Header byte 1 = 0x00: hops = 0
+    """
+    return bytes([0x08, 0x00]) + dest_hash_10 + payload
+
+
+def send_csv_raw(dest_hash_hex: str, csv_text: str) -> str:
+    """
+    Send CSV text as a raw RNS DATA packet over KISS CMD_DATA (0x00).
+    dest_hash_hex: 32-char hex address from the receiver app Nodes tab.
+    No LXMF, no ratchets, no encryption — receiver reads CSV directly.
+    """
+    if not destination:
         return "Not connected"
     try:
-        dest_hash_hex = ''.join(c for c in dest_hash_hex.strip().strip('<>') if c in '0123456789abcdefABCDEF')
-        dest_hash = bytes.fromhex(dest_hash_hex)
-        with _data_lock:
-            recalled_identity = known_identities.get(dest_hash_hex)
-        if recalled_identity is None:
-            recalled_identity = RNS.Identity.recall(dest_hash)
-        if recalled_identity is None:
-            RNS.Transport.request_path(dest_hash)
-            return "Unknown destination - base station must announce first"
-        lxmf_dest = RNS.Destination(recalled_identity, RNS.Destination.OUT,
-            RNS.Destination.SINGLE, "lxmf", "delivery")
-        actual_hash = RNS.prettyhexrep(lxmf_dest.hash).strip("<>")
-        if actual_hash != dest_hash_hex:
-            return f"Hash mismatch: got {actual_hash}"
+        # Find the active AndroidBTInterface
+        iface = None
+        for i in RNS.Transport.interfaces:
+            if hasattr(i, '_socket') and i.online:
+                iface = i
+                break
+        if iface is None:
+            return "No active BT interface"
 
-        # Suppress ratchets on outbound destination
-        try: lxmf_dest.ratchets = None
-        except Exception: pass
-        try: lxmf_dest.ratchets_enabled = False
-        except Exception: pass
-        try: lxmf_dest.enable_ratchets = lambda *a, **kw: None
-        except Exception: pass
-        try: lxmf_dest.disable_ratchets()
-        except Exception: pass
-        RNS.log(f"Outbound ratchets suppressed for {dest_hash_hex}")
+        dest_hex = ''.join(
+            c for c in dest_hash_hex.strip().strip('<>')
+            if c in '0123456789abcdefABCDEF'
+        ).lower()
+        if len(dest_hex) != 32:
+            return f"Invalid destination hash: {len(dest_hex)} chars (need 32)"
 
-        delivered = threading.Event()
-        result = {"ok": False}
-        def on_delivered(m): result["ok"] = True; delivered.set()
-        def on_failed(m): delivered.set()
-        msg = LXMF.LXMessage(lxmf_dest, destination, csv_text,
-            title=f"HARVEST_CSV:{filename}",
-            desired_method=LXMF.LXMessage.OPPORTUNISTIC)
-        msg.register_delivery_callback(on_delivered)
-        msg.register_failed_callback(on_failed)
-        lxmf_router.handle_outbound(msg)
-        delivered.wait(timeout=120)
-        return "OK" if result["ok"] else "Error: delivery timed out"
+        dest_hash_10 = bytes.fromhex(dest_hex)[:10]
+        payload      = csv_text.encode('utf-8')
+        pkt          = _build_rns_data_packet(dest_hash_10, payload)
+        frame        = kiss_cmd(CMD_DATA, pkt)
+        iface._socket.write(frame)
+        RNS.log(f"Raw CSV sent to {dest_hex[:16]}... ({len(payload)}b payload)")
+        return "OK"
+
     except Exception as e:
         import traceback
-        RNS.log(f"send_csv error: {traceback.format_exc()}")
-        return f"Error: {e}"
-
-# -- Harvest photo via RNS file field -----------------------------------------
-
-def send_photo(dest_hash_hex, photo_path, record_id):
-    if not lxmf_router or not destination:
-        return "Not connected"
-    try:
-        img_fmt = "jpeg"
-        img_bytes = b""
-        try:
-            from PIL import Image as _PIL
-            import io as _io
-            img = _PIL.open(photo_path)
-            img.thumbnail((320, 320), _PIL.LANCZOS)
-            buf = _io.BytesIO()
-            img.save(buf, format="JPEG", quality=40)
-            img_bytes = buf.getvalue()
-        except Exception as e:
-            RNS.log(f"PIL compress failed: {e}, reading raw JPEG")
-            with open(photo_path, "rb") as f:
-                img_bytes = f.read()
-            img_fmt = "jpeg"
-        kb = len(img_bytes) / 1024
-        RNS.log(f'Photo {kb:.1f} KB ({img_fmt}) for record {record_id}')
-        dest_hash_hex = ''.join(c for c in dest_hash_hex.strip().strip('<>') if c in '0123456789abcdefABCDEF')
-        dest_hash = bytes.fromhex(dest_hash_hex)
-        with _data_lock:
-            recalled_identity = known_identities.get(dest_hash_hex)
-        if recalled_identity is None:
-            recalled_identity = RNS.Identity.recall(dest_hash)
-        if recalled_identity is None:
-            RNS.Transport.request_path(dest_hash)
-            return "Unknown destination - base station must announce first"
-        lxmf_dest = RNS.Destination(recalled_identity, RNS.Destination.OUT,
-            RNS.Destination.SINGLE, "lxmf", "delivery")
-        actual_hash = RNS.prettyhexrep(lxmf_dest.hash).strip("<>")
-        if actual_hash != dest_hash_hex:
-            return f"Hash mismatch: got {actual_hash}"
-        if not RNS.Transport.has_path(dest_hash):
-            RNS.log(f'Requesting path to {dest_hash_hex}...')
-            RNS.Transport.request_path(dest_hash)
-            time.sleep(5.0)
-        import os as _os
-        fname = f"harvest_{record_id}_{_os.path.basename(photo_path)}"
-        fields = {"ia": [img_fmt, img_bytes]}
-        delivered = threading.Event()
-        result = {"ok": False, "state": "unknown"}
-        def on_delivered(m): result["ok"] = True; result["state"] = "delivered"; delivered.set()
-        def on_failed(m): result["state"] = f"failed state={m.state}"; delivered.set()
-        msg = LXMF.LXMessage(
-            lxmf_dest,
-            destination,
-            f"Harvest photo for record {record_id}",
-            title=f"HARVEST_PHOTO:{record_id}",
-            desired_method=LXMF.LXMessage.OPPORTUNISTIC,
-            fields=fields)
-        msg.register_delivery_callback(on_delivered)
-        msg.register_failed_callback(on_failed)
-        lxmf_router.handle_outbound(msg)
-        delivered.wait(timeout=180)
-        return "OK" if result["ok"] else f"Error: {result['state']}"
-    except Exception as e:
-        import traceback
-        RNS.log(f"send_photo error: {traceback.format_exc()}")
+        RNS.log(f"send_csv_raw error: {traceback.format_exc()}")
         return f"Error: {e}"
 
 
-
-
-
+def send_csv(dest_hash_hex: str, csv_text: str, filename: str = "") -> str:
+    """
+    Send harvest CSV to the RNS Harvest Receiver app.
+    Call this from Kotlin via RNSBridge just like send_message().
+    dest_hash_hex: 32-char address shown at top of Nodes tab in receiver app.
+    csv_text: the CSV string to send (e.g. "HRV-01,BLK-A1,24,3")
+    """
+    result = send_csv_raw(dest_hash_hex, csv_text)
+    RNS.log(f"send_csv({dest_hash_hex[:8]}...): {result}")
+    return result
