@@ -464,21 +464,22 @@ def _rns_main(bt_socket_wrapper):
             except Exception as se:
                 RNS.log(f"Identity save error: {se}")
 
-        # Delete all ratchet files before starting LXMRouter
-        # This forces plain (unencrypted) delivery on first connect
+        # Delete all cached ratchet files before LXMRouter starts
         import glob as _glob
-        ratchet_pattern = "/data/data/com.example.oilpalmharvester/files/lxmf/lxmf/ratchets/*"
-        deleted = 0
-        for rf in _glob.glob(ratchet_pattern):
-            try:
-                os.remove(rf)
-                deleted += 1
-            except Exception:
-                pass
-        if deleted:
-            RNS.log(f"Deleted {deleted} ratchet file(s) on startup")
-        else:
-            RNS.log("No ratchet files to delete (clean state)")
+        for _rf in _glob.glob("/data/data/com.example.oilpalmharvester/files/lxmf/lxmf/ratchets/*"):
+            try: os.remove(_rf)
+            except Exception: pass
+        RNS.log("Ratchet cache cleared")
+
+        # Monkey-patch Destination.enable_ratchets to a no-op at CLASS level
+        # so LXMRouter cannot enable ratchets during register_delivery_identity()
+        try:
+            _orig_enable = RNS.Destination.enable_ratchets
+            RNS.Destination.enable_ratchets = lambda self, *a, **kw: RNS.log("enable_ratchets suppressed")
+            RNS.log("Patched Destination.enable_ratchets -> no-op")
+        except Exception as _pe:
+            _orig_enable = None
+            RNS.log(f"Could not patch enable_ratchets: {_pe}")
 
         # LXMRouter also calls signal.signal internally — keep noop active through init
         lxmf_router = LXMF.LXMRouter(
@@ -486,8 +487,6 @@ def _rns_main(bt_socket_wrapper):
             autopeer=False
         )
         signal.signal = original_signal
-        # LoRa link handshake needs more attempts than the default 5.
-        # Patch the class constant so all messages get more retries.
         try:
             LXMF.LXMRouter.MAX_DELIVERY_ATTEMPTS = 20
             RNS.log("Patched LXMF MAX_DELIVERY_ATTEMPTS=20 for LoRa reliability")
@@ -498,23 +497,25 @@ def _rns_main(bt_socket_wrapper):
             identity,
             display_name="RNS Hello Android"
         )
+
+        # Restore original enable_ratchets
+        if _orig_enable is not None:
+            try:
+                RNS.Destination.enable_ratchets = _orig_enable
+                RNS.log("enable_ratchets restored")
+            except Exception: pass
+
+        # Also null out ratchets on the destination object directly
+        try:
+            destination.ratchets = None
+        except Exception: pass
+        try:
+            destination.ratchets_enabled = False
+        except Exception: pass
+        RNS.log(f"Ratchets suppressed on delivery destination")
+
         destination.set_proof_strategy(RNS.Destination.PROVE_ALL)
         destination.set_link_established_callback(incoming_link_established)
-
-        # Disable ratchets so the receiver (RNS Harvest Receiver app) can read
-        # the plaintext LXMF content. The correct API is disable_ratchets().
-        try:
-            destination.disable_ratchets()
-            RNS.log("Ratchets disabled on delivery destination (disable_ratchets)")
-        except Exception as _re:
-            RNS.log(f"disable_ratchets failed: {_re}")
-            # Try alternative: patch the ratchets attribute directly
-            try:
-                destination.ratchets = None
-                destination.ratchets_enabled = False
-                RNS.log("Ratchets disabled via attribute patch")
-            except Exception as _re2:
-                RNS.log(f"Ratchet attribute patch also failed: {_re2}")
         lxmf_router.register_delivery_callback(message_received)
         RNS.Transport.register_announce_handler(AnnounceHandler())
         RNS.Transport.register_announce_handler(RawAnnounceHandler())
@@ -793,12 +794,16 @@ def send_csv(dest_hash_hex, csv_text, filename):
         if actual_hash != dest_hash_hex:
             return f"Hash mismatch: got {actual_hash}"
 
-        # Disable ratchets — receiver cannot decrypt ratchet LXMF
-        try:
-            lxmf_dest.disable_ratchets()
-            RNS.log(f"Ratchets disabled for {dest_hash_hex}")
-        except Exception as _re:
-            RNS.log(f"disable_ratchets on outbound: {_re}")
+        # Suppress ratchets on outbound destination
+        try: lxmf_dest.ratchets = None
+        except Exception: pass
+        try: lxmf_dest.ratchets_enabled = False
+        except Exception: pass
+        try: lxmf_dest.enable_ratchets = lambda *a, **kw: None
+        except Exception: pass
+        try: lxmf_dest.disable_ratchets()
+        except Exception: pass
+        RNS.log(f"Outbound ratchets suppressed for {dest_hash_hex}")
 
         delivered = threading.Event()
         result = {"ok": False}
