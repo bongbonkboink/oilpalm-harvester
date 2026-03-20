@@ -801,10 +801,50 @@ def send_csv_raw(dest_hash_hex: str, csv_text: str) -> str:
 def send_csv(dest_hash_hex: str, csv_text: str, filename: str = "") -> str:
     """
     Send harvest CSV to the RNS Harvest Receiver app.
-    Call this from Kotlin via RNSBridge just like send_message().
-    dest_hash_hex: 32-char address shown at top of Nodes tab in receiver app.
-    csv_text: the CSV string to send (e.g. "HRV-01,BLK-A1,24,3")
+    Strips the header row and reduces to essential fields only so the entire
+    record fits in a single LoRa packet (~33 bytes vs ~197 bytes).
+    Sends: harvester_id,block_id,ripe_bunches,empty_bunches,timestamp
     """
-    result = send_csv_raw(dest_hash_hex, csv_text)
-    RNS.log(f"send_csv({dest_hash_hex[:8]}...): {result}")
-    return result
+    try:
+        # Split into lines, skip blank lines and header row
+        lines = [l.strip() for l in csv_text.strip().splitlines()]
+        data_lines = [l for l in lines
+                      if l and not l.lower().startswith('id,')
+                      and not l.lower().startswith('harvester')]
+
+        compact_lines = []
+        for line in data_lines:
+            fields = line.split(',')
+            if len(fields) >= 8:
+                # Full schema: id,harvester,block,ripe,empty,lat,lon,timestamp,...
+                harvester = fields[1].strip()
+                block     = fields[2].strip()
+                ripe      = fields[3].strip()
+                empty     = fields[4].strip()
+                timestamp = fields[7].strip()
+            elif len(fields) >= 5:
+                # Minimal schema: harvester,block,ripe,empty,timestamp
+                harvester = fields[0].strip()
+                block     = fields[1].strip()
+                ripe      = fields[2].strip()
+                empty     = fields[3].strip()
+                timestamp = fields[4].strip() if len(fields) > 4 else ""
+            else:
+                continue
+            compact_lines.append(f"{harvester},{block},{ripe},{empty},{timestamp}")
+
+        if not compact_lines:
+            RNS.log(f"send_csv: no data rows found in input")
+            return "Error: no data rows"
+
+        compact_csv = "
+".join(compact_lines)
+        RNS.log(f"send_csv compact ({len(compact_csv)}b): {compact_csv!r}")
+        result = send_csv_raw(dest_hash_hex, compact_csv)
+        RNS.log(f"send_csv({dest_hash_hex[:8]}...): {result}")
+        return result
+
+    except Exception as e:
+        import traceback
+        RNS.log(f"send_csv error: {traceback.format_exc()}")
+        return f"Error: {e}"
