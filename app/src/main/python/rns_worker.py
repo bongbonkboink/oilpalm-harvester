@@ -805,8 +805,6 @@ def send_csv(dest_hash_hex: str, csv_text: str, filename: str = "") -> str:
     dest_hash_hex: 32-char address shown at top of Nodes tab in receiver app.
     csv_text: the CSV string to send (e.g. "HRV-01,BLK-A1,24,3")
     """
-    # Log first 200 chars so we can see exactly what is being sent
-    RNS.log(f"send_csv content ({len(csv_text)}b): {repr(csv_text[:200])}")
     result = send_csv_raw(dest_hash_hex, csv_text)
     RNS.log(f"send_csv({dest_hash_hex[:8]}...): {result}")
     return result
