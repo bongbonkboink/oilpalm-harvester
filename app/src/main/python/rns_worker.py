@@ -837,8 +837,7 @@ def send_csv(dest_hash_hex: str, csv_text: str, filename: str = "") -> str:
             RNS.log(f"send_csv: no data rows found in input")
             return "Error: no data rows"
 
-        compact_csv = "
-".join(compact_lines)
+        compact_csv = "\n".join(compact_lines)
         RNS.log(f"send_csv compact ({len(compact_csv)}b): {compact_csv!r}")
         result = send_csv_raw(dest_hash_hex, compact_csv)
         RNS.log(f"send_csv({dest_hash_hex[:8]}...): {result}")
