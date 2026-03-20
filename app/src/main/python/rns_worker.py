@@ -464,24 +464,26 @@ def _rns_main(bt_socket_wrapper):
             except Exception as se:
                 RNS.log(f"Identity save error: {se}")
 
-        # Clear stale ratchet cache — prevents encrypted delivery to destinations
-        # that cannot decrypt ratchet LXMF (e.g. the harvest receiver app).
-        ratchet_dir = "/data/data/com.example.oilpalmharvester/files/lxmf/lxmf/ratchets"
-        if os.path.isdir(ratchet_dir):
-            cleared = 0
-            for f in os.listdir(ratchet_dir):
-                try:
-                    os.remove(os.path.join(ratchet_dir, f))
-                    cleared += 1
-                except Exception:
-                    pass
-            if cleared:
-                RNS.log(f"Cleared {cleared} stale ratchet file(s)")
+        # Delete all ratchet files before starting LXMRouter
+        # This forces plain (unencrypted) delivery on first connect
+        import glob as _glob
+        ratchet_pattern = "/data/data/com.example.oilpalmharvester/files/lxmf/lxmf/ratchets/*"
+        deleted = 0
+        for rf in _glob.glob(ratchet_pattern):
+            try:
+                os.remove(rf)
+                deleted += 1
+            except Exception:
+                pass
+        if deleted:
+            RNS.log(f"Deleted {deleted} ratchet file(s) on startup")
+        else:
+            RNS.log("No ratchet files to delete (clean state)")
 
         # LXMRouter also calls signal.signal internally — keep noop active through init
         lxmf_router = LXMF.LXMRouter(
             storagepath="/data/data/com.example.oilpalmharvester/files/lxmf",
-            autopeer=False  # plain delivery — receiver cannot decrypt ratchets
+            autopeer=False
         )
         signal.signal = original_signal
         # LoRa link handshake needs more attempts than the default 5.
@@ -497,14 +499,22 @@ def _rns_main(bt_socket_wrapper):
             display_name="RNS Hello Android"
         )
         destination.set_proof_strategy(RNS.Destination.PROVE_ALL)
-        # Disable ratchets on our own delivery destination so incoming
-        # message acknowledgements also use plain delivery
-        try:
-            destination.set_ratchets_enabled(False)
-            RNS.log("Ratchets disabled on delivery destination")
-        except Exception as _re:
-            RNS.log(f"set_ratchets_enabled not available: {_re}")
         destination.set_link_established_callback(incoming_link_established)
+
+        # Disable ratchets so the receiver (RNS Harvest Receiver app) can read
+        # the plaintext LXMF content. The correct API is disable_ratchets().
+        try:
+            destination.disable_ratchets()
+            RNS.log("Ratchets disabled on delivery destination (disable_ratchets)")
+        except Exception as _re:
+            RNS.log(f"disable_ratchets failed: {_re}")
+            # Try alternative: patch the ratchets attribute directly
+            try:
+                destination.ratchets = None
+                destination.ratchets_enabled = False
+                RNS.log("Ratchets disabled via attribute patch")
+            except Exception as _re2:
+                RNS.log(f"Ratchet attribute patch also failed: {_re2}")
         lxmf_router.register_delivery_callback(message_received)
         RNS.Transport.register_announce_handler(AnnounceHandler())
         RNS.Transport.register_announce_handler(RawAnnounceHandler())
@@ -783,19 +793,12 @@ def send_csv(dest_hash_hex, csv_text, filename):
         if actual_hash != dest_hash_hex:
             return f"Hash mismatch: got {actual_hash}"
 
-        # Force plain (unencrypted) delivery — harvest receiver cannot decrypt ratchets
+        # Disable ratchets — receiver cannot decrypt ratchet LXMF
         try:
-            lxmf_dest.set_ratchets_enabled(False)
-        except Exception:
-            pass
-        # Also delete any cached ratchet for this specific destination
-        ratchet_file = f"/data/data/com.example.oilpalmharvester/files/lxmf/lxmf/ratchets/{dest_hash_hex}.ratchets"
-        if os.path.exists(ratchet_file):
-            try:
-                os.remove(ratchet_file)
-                RNS.log(f"Deleted ratchet cache for {dest_hash_hex}")
-            except Exception:
-                pass
+            lxmf_dest.disable_ratchets()
+            RNS.log(f"Ratchets disabled for {dest_hash_hex}")
+        except Exception as _re:
+            RNS.log(f"disable_ratchets on outbound: {_re}")
 
         delivered = threading.Event()
         result = {"ok": False}
