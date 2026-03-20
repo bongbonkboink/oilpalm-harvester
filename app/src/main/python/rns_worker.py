@@ -464,10 +464,24 @@ def _rns_main(bt_socket_wrapper):
             except Exception as se:
                 RNS.log(f"Identity save error: {se}")
 
+        # Clear stale ratchet cache — prevents encrypted delivery to destinations
+        # that cannot decrypt ratchet LXMF (e.g. the harvest receiver app).
+        ratchet_dir = "/data/data/com.example.oilpalmharvester/files/lxmf/lxmf/ratchets"
+        if os.path.isdir(ratchet_dir):
+            cleared = 0
+            for f in os.listdir(ratchet_dir):
+                try:
+                    os.remove(os.path.join(ratchet_dir, f))
+                    cleared += 1
+                except Exception:
+                    pass
+            if cleared:
+                RNS.log(f"Cleared {cleared} stale ratchet file(s)")
+
         # LXMRouter also calls signal.signal internally — keep noop active through init
         lxmf_router = LXMF.LXMRouter(
             storagepath="/data/data/com.example.oilpalmharvester/files/lxmf",
-            autopeer=False  # Disable autopeer/ratchets — receiver cannot decrypt ratchet LXMF
+            autopeer=False  # plain delivery — receiver cannot decrypt ratchets
         )
         signal.signal = original_signal
         # LoRa link handshake needs more attempts than the default 5.
@@ -483,6 +497,13 @@ def _rns_main(bt_socket_wrapper):
             display_name="RNS Hello Android"
         )
         destination.set_proof_strategy(RNS.Destination.PROVE_ALL)
+        # Disable ratchets on our own delivery destination so incoming
+        # message acknowledgements also use plain delivery
+        try:
+            destination.set_ratchets_enabled(False)
+            RNS.log("Ratchets disabled on delivery destination")
+        except Exception as _re:
+            RNS.log(f"set_ratchets_enabled not available: {_re}")
         destination.set_link_established_callback(incoming_link_established)
         lxmf_router.register_delivery_callback(message_received)
         RNS.Transport.register_announce_handler(AnnounceHandler())
@@ -762,14 +783,19 @@ def send_csv(dest_hash_hex, csv_text, filename):
         if actual_hash != dest_hash_hex:
             return f"Hash mismatch: got {actual_hash}"
 
-        # Disable ratchets for CSV delivery — the receiver cannot decrypt
-        # ratchet-encrypted LXMF without the ratchet private key. Plain LXMF
-        # delivers the CSV in cleartext which the receiver can parse directly.
+        # Force plain (unencrypted) delivery — harvest receiver cannot decrypt ratchets
         try:
             lxmf_dest.set_ratchets_enabled(False)
-            RNS.log(f"Ratchets disabled for {dest_hash_hex}")
-        except Exception as _re:
-            RNS.log(f"Could not disable ratchets (RNS version may not support it): {_re}")
+        except Exception:
+            pass
+        # Also delete any cached ratchet for this specific destination
+        ratchet_file = f"/data/data/com.example.oilpalmharvester/files/lxmf/lxmf/ratchets/{dest_hash_hex}.ratchets"
+        if os.path.exists(ratchet_file):
+            try:
+                os.remove(ratchet_file)
+                RNS.log(f"Deleted ratchet cache for {dest_hash_hex}")
+            except Exception:
+                pass
 
         delivered = threading.Event()
         result = {"ok": False}
