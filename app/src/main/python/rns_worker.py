@@ -467,7 +467,7 @@ def _rns_main(bt_socket_wrapper):
         # LXMRouter also calls signal.signal internally — keep noop active through init
         lxmf_router = LXMF.LXMRouter(
             storagepath="/data/data/com.example.oilpalmharvester/files/lxmf",
-            autopeer=True
+            autopeer=False  # Disable autopeer/ratchets — receiver cannot decrypt ratchet LXMF
         )
         signal.signal = original_signal
         # LoRa link handshake needs more attempts than the default 5.
@@ -761,6 +761,16 @@ def send_csv(dest_hash_hex, csv_text, filename):
         actual_hash = RNS.prettyhexrep(lxmf_dest.hash).strip("<>")
         if actual_hash != dest_hash_hex:
             return f"Hash mismatch: got {actual_hash}"
+
+        # Disable ratchets for CSV delivery — the receiver cannot decrypt
+        # ratchet-encrypted LXMF without the ratchet private key. Plain LXMF
+        # delivers the CSV in cleartext which the receiver can parse directly.
+        try:
+            lxmf_dest.set_ratchets_enabled(False)
+            RNS.log(f"Ratchets disabled for {dest_hash_hex}")
+        except Exception as _re:
+            RNS.log(f"Could not disable ratchets (RNS version may not support it): {_re}")
+
         delivered = threading.Event()
         result = {"ok": False}
         def on_delivered(m): result["ok"] = True; delivered.set()
